@@ -1,11 +1,11 @@
 // ======================================================
 //  SERVER COMPLET — AUTOLOGIN BCA + LOGGER + TELEGRAM
-//  Funcționează 100% pe Railway
+//  CommonJS (compatibil Railway)
 // ======================================================
 
-import express from "express";
-import cors from "cors";
-import fetch from "node-fetch";
+const express = require("express");
+const cors = require("cors");
+const fetch = require("node-fetch");   // pentru Telegram
 
 const app = express();
 app.use(express.json());
@@ -17,19 +17,18 @@ app.use(cors());
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID   = process.env.TELEGRAM_CHAT_ID;
 
-const BCA_USERNAME = process.env.BCA_USERNAME;   // date reale BCA
+const BCA_USERNAME = process.env.BCA_USERNAME;
 const BCA_PASSWORD = process.env.BCA_PASSWORD;
 
-// verificare inițială
 if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-  console.warn("⚠ Telegram env vars lipsă în Railway!");
+  console.warn("⚠ Telegram vars lipsesc!");
 }
 if (!BCA_USERNAME || !BCA_PASSWORD) {
-  console.warn("⚠ BCA_USERNAME / BCA_PASSWORD lipsesc în Railway!");
+  console.warn("⚠ BCA login vars lipsesc!");
 }
 
 // ------------------------------------------------------
-// 1️⃣ Funcție TRIMITERE MESAJ pe TELEGRAM
+// TRIMITERE MESAJ PE TELEGRAM
 // ------------------------------------------------------
 async function sendToTelegram(message) {
     try {
@@ -45,19 +44,19 @@ async function sendToTelegram(message) {
             })
         });
 
-        console.log("📨 Trimis la Telegram");
+        console.log("📨 Trimisa licitația la Telegram");
     } catch (err) {
-        console.error("❌ Eroare trimitere Telegram:", err);
+        console.error("❌ Eroare Telegram:", err);
     }
 }
 
 // ------------------------------------------------------
-// 2️⃣ Endpoint AUTOLOGIN pentru BCA
+// AUTOLOGIN BCA — trimite username + parola către script
 // ------------------------------------------------------
 app.post("/auto-login-bca", (req, res) => {
-    console.log("🔐 Cerere autologin BCA");
+    console.log("🔐 Cerere autologin BCA...");
 
-    return res.json({
+    res.json({
         ok: true,
         username: BCA_USERNAME || "",
         password: BCA_PASSWORD || ""
@@ -65,8 +64,7 @@ app.post("/auto-login-bca", (req, res) => {
 });
 
 // ------------------------------------------------------
-// 3️⃣ LOGGER — primește licitațiile reale
-//     (scriptul injectabil trimite aici)
+// LOGGER — primește licitații și trimite la Telegram
 // ------------------------------------------------------
 app.post("/receive-bid", async (req, res) => {
     const data = req.body || {};
@@ -84,19 +82,18 @@ app.post("/receive-bid", async (req, res) => {
 📸 Imagine: ${data.image_url || "N/A"}`;
 
     await sendToTelegram(msg);
-
     res.json({ ok: true });
 });
 
 // ------------------------------------------------------
-// 4️⃣ Test endpoint
+// Test
 // ------------------------------------------------------
 app.get("/", (req, res) => {
     res.send("Server ONLINE ✔ Logger + Autologin READY");
 });
 
 // ------------------------------------------------------
-// 5️⃣ Railway PORT bind
+// Railway bind
 // ------------------------------------------------------
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
