@@ -10,7 +10,7 @@
     // CONFIG
     // --------------------------
     const SERVER_URL = "bca-ayvens.up.railway.app/receive-bid";
-    const CLIENT_ID = "ANGAJAT"; // completezi tu manual per angajat
+    const CLIENT_ID = "Marian";
 
     const BID_KEYWORDS = ["bid", "licit", "offer", "oferta", "place", "submit"];
     const ALLOWED_HOSTS = [
