@@ -1,11 +1,13 @@
 // ======================================================
 //  SERVER COMPLET — AUTOLOGIN BCA + LOGGER + TELEGRAM
-//  CommonJS (compatibil Railway)
+//  CommonJS (compatibil Railway / Node 18+)
 // ======================================================
 
 const express = require("express");
 const cors = require("cors");
-const fetch = require("node-fetch");   // pentru Telegram
+
+// Node 18 are fetch integrat
+const fetch = (...args) => globalThis.fetch(...args);
 
 const app = express();
 app.use(express.json());
@@ -24,7 +26,7 @@ if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
   console.warn("⚠ Telegram vars lipsesc!");
 }
 if (!BCA_USERNAME || !BCA_PASSWORD) {
-  console.warn("⚠ BCA login vars lipsesc!");
+  console.warn("⚠ BCA_USERNAME / BCA_PASSWORD lipsesc!");
 }
 
 // ------------------------------------------------------
@@ -86,7 +88,7 @@ app.post("/receive-bid", async (req, res) => {
 });
 
 // ------------------------------------------------------
-// Test
+// Test endpoint
 // ------------------------------------------------------
 app.get("/", (req, res) => {
     res.send("Server ONLINE ✔ Logger + Autologin READY");
