@@ -9,7 +9,7 @@
     // --------------------------
     // CONFIG
     // --------------------------
-    const SERVER_URL = "bca-ayvens.up.railway.app/receive-bid";
+    const SERVER_URL = "https://bca-ayvens.up.railway.app/receive-bid";
     const CLIENT_ID = "Marian";
 
     const BID_KEYWORDS = ["bid", "licit", "offer", "oferta", "place", "submit"];
