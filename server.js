@@ -1,97 +1,104 @@
-// server.js
-// ---------------------------------------------------------
-// Server Node.js + Express care primește licitațiile și le
-// trimite către Telegram. Gata pentru Railway Hosting.
-// ---------------------------------------------------------
+// ======================================================
+//  SERVER COMPLET — AUTOLOGIN BCA + LOGGER + TELEGRAM
+//  Funcționează 100% pe Railway
+// ======================================================
 
-require("dotenv").config();
-const express = require("express");
-const axios = require("axios");
-const cors = require("cors");
+import express from "express";
+import cors from "cors";
+import fetch from "node-fetch";
+
 const app = express();
-
-// ---------------------------------------------------------
-// CONFIG
-// ---------------------------------------------------------
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-
-if (!BOT_TOKEN || !CHAT_ID) {
-    console.error("❌ ERROR: TELEGRAM_BOT_TOKEN sau TELEGRAM_CHAT_ID lipsesc!");
-    process.exit(1);
-}
-
-// Middleware
+app.use(express.json());
 app.use(cors());
-app.use(express.json({ limit: "2mb" }));
-app.use(express.urlencoded({ extended: true }));
 
-// ---------------------------------------------------------
-// Helper — trimite mesaj formatat + poză către Telegram
-// ---------------------------------------------------------
+// ------------------------------------------------------
+// ENV (setezi în Railway → Variables)
+// ------------------------------------------------------
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID   = process.env.TELEGRAM_CHAT_ID;
 
-async function sendTelegramMessage(data) {
-    const { client_id, item_title, bid_amount, currency, timestamp, source, item_link, image_url } = data;
+const BCA_USERNAME = process.env.BCA_USERNAME;   // date reale BCA
+const BCA_PASSWORD = process.env.BCA_PASSWORD;
 
-    const textMessage =
-        `🚨 <b>BID DETECTAT</b>\n\n` +
-        `👤 Angajat: <b>${client_id}</b>\n` +
-        `🚗 Mașină: <b>${item_title}</b>\n` +
-        `💶 Suma licitată: <b>${bid_amount} ${currency}</b>\n` +
-        `⏱️ Timp: <b>${timestamp}</b>\n` +
-        `🔎 Sursă: <b>${source}</b>\n` +
-        `🔗 <a href="${item_link}">Deschide mașina</a>`;
+// verificare inițială
+if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+  console.warn("⚠ Telegram env vars lipsă în Railway!");
+}
+if (!BCA_USERNAME || !BCA_PASSWORD) {
+  console.warn("⚠ BCA_USERNAME / BCA_PASSWORD lipsesc în Railway!");
+}
 
+// ------------------------------------------------------
+// 1️⃣ Funcție TRIMITERE MESAJ pe TELEGRAM
+// ------------------------------------------------------
+async function sendToTelegram(message) {
     try {
-        if (image_url) {
-            await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
-                chat_id: CHAT_ID,
-                photo: image_url,
-                caption: textMessage,
+        const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+
+        await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                chat_id: TELEGRAM_CHAT_ID,
+                text: message,
                 parse_mode: "HTML"
-            });
-        } else {
-            await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-                chat_id: CHAT_ID,
-                text: textMessage,
-                parse_mode: "HTML"
-            });
-        }
+            })
+        });
+
+        console.log("📨 Trimis la Telegram");
     } catch (err) {
-        console.error("❌ Eroare trimitere Telegram:", err.response?.data || err.message);
+        console.error("❌ Eroare trimitere Telegram:", err);
     }
 }
 
-// ---------------------------------------------------------
-// Endpoint principal de log licitații
-// ---------------------------------------------------------
+// ------------------------------------------------------
+// 2️⃣ Endpoint AUTOLOGIN pentru BCA
+// ------------------------------------------------------
+app.post("/auto-login-bca", (req, res) => {
+    console.log("🔐 Cerere autologin BCA");
 
-app.post("/receive-bid", async (req, res) => {
-    try {
-        const data = req.body;
-
-        if (!data || !data.client_id || !data.bid_amount) {
-            console.log("❌ Payload invalid:", req.body);
-            return res.status(400).json({ error: "Invalid payload" });
-        }
-
-        console.log("📥 Licitație primită:", data);
-
-        await sendTelegramMessage(data);
-
-        res.status(200).json({ success: true });
-    } catch (err) {
-        console.error("❌ Eroare receive-bid:", err.message);
-        res.status(500).json({ error: "Internal server error" });
-    }
+    return res.json({
+        ok: true,
+        username: BCA_USERNAME || "",
+        password: BCA_PASSWORD || ""
+    });
 });
 
-// ---------------------------------------------------------
-// Start server
-// ---------------------------------------------------------
+// ------------------------------------------------------
+// 3️⃣ LOGGER — primește licitațiile reale
+//     (scriptul injectabil trimite aici)
+// ------------------------------------------------------
+app.post("/receive-bid", async (req, res) => {
+    const data = req.body || {};
 
-const PORT = process.env.PORT || 3000;
+    console.log("⚡ BID RECEIVED:", data);
 
+    const msg =
+`<b>🚨 LICITATIE NOUĂ</b>
+
+👤 Angajat: <b>${data.client_id || "necunoscut"}</b>
+🚗 Titlu: <b>${data.item_title}</b>
+💶 Suma: <b>${data.bid_amount} EUR</b>
+🔗 Link: ${data.item_link}
+🕒 La: ${data.timestamp}
+📸 Imagine: ${data.image_url || "N/A"}`;
+
+    await sendToTelegram(msg);
+
+    res.json({ ok: true });
+});
+
+// ------------------------------------------------------
+// 4️⃣ Test endpoint
+// ------------------------------------------------------
+app.get("/", (req, res) => {
+    res.send("Server ONLINE ✔ Logger + Autologin READY");
+});
+
+// ------------------------------------------------------
+// 5️⃣ Railway PORT bind
+// ------------------------------------------------------
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log("🚀 Server pornit pe port", PORT);
 });
