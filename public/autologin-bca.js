@@ -1,99 +1,119 @@
-// ======================================================
-// AUTOLOGIN BCA (FULL AUTOMATIC, NO PASSWORD EXPOSED)
-// Works together with server endpoint /auto-login-bca
-// ======================================================
+// ============================================================
+// AUTOLOGIN BCA — injectat prin Firefox (fără Tampermonkey)
+// ============================================================
 
 (function () {
     "use strict";
 
-    const SERVER_URL = "https://bca-ayvens.up.railway.app/auto-login-bca"; 
-    const USERNAME_FIELD = "username";   // placeholders
-    const PASSWORD_FIELD = "password";   // placeholders
+    const SERVER_URL = "https://bca-ayvens.up.railway.app/auto-login-bca";
 
-    // Only run on BCA main site
-    if (!location.hostname.includes("bca.com")) return;
+    // domenii acceptate
+    const BCA_HOSTS = [
+        "www.bca.com",
+        "bca.com",
+    ];
 
-    // Delay helper
-    const wait = ms => new Promise(res => setTimeout(res, ms));
+    // dacă nu suntem pe BCA, nu facem nimic
+    if (!BCA_HOSTS.includes(location.hostname)) return;
 
-    // Detect if user is logged in based on the presence of username indicator
-    function isLoggedIn() {
-        const userInfo = document.querySelector(".header__user, .user-info, .logout, a[href*='logout']");
-        return !!userInfo;
-    }
+    console.log("[AUTOLOGIN-BCA] Script pornit");
 
-    // Detect login button
-    function clickLoginButton() {
-        const btn = document.querySelector("a[href='/ro_RO/login']");
-        if (btn) btn.click();
-    }
+    // ---------------------------------------------------------
+    // 1) Așteaptă un element în pagină
+    // ---------------------------------------------------------
+    function waitFor(selector, timeout = 10000) {
+        return new Promise((resolve, reject) => {
+            const start = Date.now();
 
-    // Detect login form
-    function findLoginForm() {
-        const form = document.querySelector("form input[name='" + USERNAME_FIELD + "']");
-        return !!form;
-    }
-
-    // Inject cookies into browser
-    function injectCookies(cookies) {
-        cookies.forEach(cookie => {
-            document.cookie = `${cookie.name}=${cookie.value}; domain=${cookie.domain}; path=${cookie.path}; secure`;
+            const timer = setInterval(() => {
+                const el = document.querySelector(selector);
+                if (el) {
+                    clearInterval(timer);
+                    resolve(el);
+                }
+                if (Date.now() - start > timeout) {
+                    clearInterval(timer);
+                    reject("Timeout waiting for selector: " + selector);
+                }
+            }, 100);
         });
     }
 
-    async function autoLoginFlow() {
-        // Already logged in
-        if (isLoggedIn()) return;
-
-        console.log("[AUTOLOGIN BCA] Not logged in — starting process...");
-
-        // Step 1: click Autentificare to open login page
-        clickLoginButton();
-
-        // Wait for login form to load
-        for (let i = 0; i < 30; i++) {
-            await wait(200);
-            if (findLoginForm()) break;
-        }
-
-        if (!findLoginForm()) {
-            console.error("[AUTOLOGIN BCA] Login form not found.");
-            return;
-        }
-
-        console.log("[AUTOLOGIN BCA] Login form detected — calling server.");
-
-        // Step 2: Ask server to do backend login and return cookies
+    // ---------------------------------------------------------
+    // 2) Cere credențialele reale de la serverul tău (Railway)
+    // ---------------------------------------------------------
+    async function getCredentials() {
         try {
-            const response = await fetch(SERVER_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ request: "login" })
-            });
+            const res = await fetch(SERVER_URL, { method: "POST" });
+            const data = await res.json();
+            if (data.ok) return data;
+        } catch (err) {
+            console.error("[AUTOLOGIN-BCA] Eroare credențiale:", err);
+        }
+        return null;
+    }
 
-            const data = await response.json();
+    // ---------------------------------------------------------
+    // 3) Autologin flow
+    // ---------------------------------------------------------
+    async function autoLogin() {
+        try {
+            console.log("[AUTOLOGIN-BCA] Pornesc procedura...");
 
-            if (!data.success) {
-                console.error("[AUTOLOGIN BCA] Server returned failure", data);
+            // Suntem pe homepage? OK.
+            // Căutăm butonul "Autentificare"
+            const loginBtn = await waitFor('a[data-el="login"]');
+
+            console.log("[AUTOLOGIN-BCA] Găsit butonul de Autentificare");
+
+            // Click pe login
+            loginBtn.click();
+
+            // Așteptăm formularul BCA clasic
+            // username = #username, password = #password
+            const userInput = await waitFor("#username");
+            const passInput = await waitFor("#password");
+
+            console.log("[AUTOLOGIN-BCA] Formular găsit");
+
+            // luăm datele reale de la server
+            const creds = await getCredentials();
+            if (!creds) {
+                console.error("[AUTOLOGIN-BCA] Nu am primit credențiale");
                 return;
             }
 
-            console.log("[AUTOLOGIN BCA] Received cookies.");
+            // completăm automat
+            userInput.value = creds.username;
+            passInput.value = creds.password;
 
-            // Step 3: inject cookies into browser
-            injectCookies(data.cookies);
+            console.log("[AUTOLOGIN-BCA] Date completate");
 
-            // Step 4: refresh page to apply session
-            location.href = "https://www.bca.com/ro_RO";
+            // Așteptăm butonul de Login
+            const submitBtn = document.querySelector("button[type='submit'], input[type='submit']");
+            if (!submitBtn) {
+                console.error("[AUTOLOGIN-BCA] Nu am găsit buton submit");
+                return;
+            }
 
-        } catch (err) {
-            console.error("[AUTOLOGIN BCA] ERROR contacting server:", err);
+            submitBtn.click();
+            console.log("[AUTOLOGIN-BCA] Am apăsat Login");
+
+            // Așteptăm redirect
+            setTimeout(() => {
+                console.log("[AUTOLOGIN-BCA] Autologin BCA finalizat");
+            }, 3000);
+
+        } catch (e) {
+            console.error("[AUTOLOGIN-BCA] Eroare flow:", e);
         }
     }
 
-    // Run autologin shortly after page loads
+    // =========================================================
+    // PORNIREA SCRIPTULUI
+    // =========================================================
     window.addEventListener("load", () => {
-        setTimeout(autoLoginFlow, 1000);
+        setTimeout(autoLogin, 1000);
     });
 
 })();
