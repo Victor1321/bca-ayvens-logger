@@ -42,21 +42,32 @@
     }
 
     // ---------------------------------------------------------
-    // util: cere credențialele reale de la server
+    // util: cere credențialele reale de la extensie (bridge)
     // ---------------------------------------------------------
-    async function getCredentials() {
-        try {
-            console.log("[AUTOLOGIN-BCA] Cer credențiale de la server...");
-            const res = await fetch(SERVER_URL, { method: "POST" });
-            const data = await res.json();
-            if (data && data.ok && data.username && data.password) {
-                return data;
+    function getCredentials() {
+        return new Promise((resolve) => {
+            console.log("[AUTOLOGIN-BCA] Cer credențiale de la extensie (bridge)...");
+
+            function handler(event) {
+                if (event.source !== window) return;
+                const data = event.data || {};
+                if (data.type === "BCA_CREDS") {
+                    window.removeEventListener("message", handler);
+                    if (data.creds && data.creds.ok) {
+                        console.log("[AUTOLOGIN-BCA] Am primit credențiale de la extensie.");
+                        resolve(data.creds);
+                    } else {
+                        console.error("[AUTOLOGIN-BCA] Credenciales invalide sau lipsă:", data.creds);
+                        resolve(null);
+                    }
+                }
             }
-            console.error("[AUTOLOGIN-BCA] Răspuns invalid la credențiale:", data);
-        } catch (err) {
-            console.error("[AUTOLOGIN-BCA] Eroare credențiale:", err);
-        }
-        return null;
+
+            window.addEventListener("message", handler);
+
+            // declanșează cererea către content script
+            window.postMessage({ type: "BCA_GET_CREDS" }, "*");
+        });
     }
 
     // ---------------------------------------------------------
