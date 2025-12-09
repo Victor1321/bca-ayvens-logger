@@ -124,8 +124,12 @@
 
             console.log("[AUTOLOGIN-BCA] Date completate, caut buton submit...");
 
-            const submitBtn =
-                document.querySelector("button[type='submit'], input[type='submit'], button.login, button[type='button'][name='login']");
+                        console.log("[AUTOLOGIN-BCA] Date completate, caut buton submit...");
+
+            const submitBtn = await waitFor(
+                "#loginButton, button#loginButton, button[id='loginButton'], button[type='submit'], input[type='submit'], button.login, button[type='button'][name='login']",
+                15000
+            );
 
             if (!submitBtn) {
                 console.error("[AUTOLOGIN-BCA] Nu am găsit buton submit");
@@ -134,6 +138,7 @@
 
             submitBtn.click();
             console.log("[AUTOLOGIN-BCA] Am apăsat Login, aștept redirect...");
+
 
             setTimeout(() => {
                 console.log("[AUTOLOGIN-BCA] Autologin BCA — flow login terminat (probabil redirectat).");
