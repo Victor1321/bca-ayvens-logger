@@ -1,11 +1,9 @@
 // ============================================================
-// AUTOLOGIN BCA (homepage + login.bca.com)
+// AUTOLOGIN BCA (homepage + login.bca.com) — BRIDGE via EXTENSIE
 // ============================================================
 
 (function () {
     "use strict";
-
-    const SERVER_URL = "https://bca-ayvens.up.railway.app/auto-login-bca";
 
     // unde dăm click pe „Autentificare”
     const HOME_HOSTS = [
@@ -65,7 +63,7 @@
 
             window.addEventListener("message", handler);
 
-            // declanșează cererea către content script
+            // declanșează cererea către content script (extensie)
             window.postMessage({ type: "BCA_GET_CREDS" }, "*");
         });
     }
@@ -152,7 +150,6 @@
     function init() {
         if (HOME_HOSTS.includes(HOST)) {
             console.log("[AUTOLOGIN-BCA] Host homepage detectat:", HOST);
-            // mic delay ca să fie totul montat
             setTimeout(handleHome, 1000);
         } else if (LOGIN_HOSTS.includes(HOST)) {
             console.log("[AUTOLOGIN-BCA] Host login detectat:", HOST);
