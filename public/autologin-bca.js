@@ -51,7 +51,7 @@
         #bca-autologin-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 1);
             z-index: 999999;
             display: flex;
             align-items: center;
