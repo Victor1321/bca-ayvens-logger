@@ -9,7 +9,7 @@
     // --------------------------
     // CONFIG
     // --------------------------
-    const SERVER_URL = "bca-ayvens.up.railway.app/receive-bid";
+    const SERVER_URL = "https://bca-ayvens.up.railway.app/receive-bid";
     const CLIENT_ID = "Nume";
 
     const BID_KEYWORDS = ["bid", "licit", "offer", "oferta", "place", "submit"];
@@ -103,16 +103,38 @@
     }
 
     // --------------------------
-    // Imagine – BCA
+    // Imagine – BCA + Ayvens
     // --------------------------
-    function extractImageUrl() {
+    function extractImageUrl(btn) {
+        const host = location.hostname;
+
+        // Ayvens – luam poza din cardul vehiculului
+        if (host.includes("carmarket.ayvens.com")) {
+            let img = null;
+
+            // 1) încearcă mai întâi în cardul butonului
+            if (btn) {
+                const card = btn.closest(".vehicle-card, .vehicle, .search-result, .row, article, section, div");
+                if (card) {
+                    img = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture']");
+                }
+            }
+
+            // 2) fallback global
+            if (!img) {
+                img = document.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture']");
+            }
+
+            if (img && img.src) return img.src;
+        }
+
+        // BCA
         let img = document.querySelector(".viewlot__img img.MainImg");
         if (img && img.src) return img.src;
 
         img = document.querySelector(".ImageA img");
         if (img && img.src) return img.src;
 
-        // Ayvens nu are imagine direct în listă
         return null;
     }
 
@@ -147,7 +169,7 @@
             currency: "EUR",
             timestamp: timestamp(),
             source: sourceTag,
-            image_url: extractImageUrl()
+            image_url: extractImageUrl(btn)
         };
     }
 
@@ -172,7 +194,7 @@
     }
 
     // =========================================================
-    // START – Script active only on allowed hosts
+    // START – Script activ doar pe hosturile permise
     // =========================================================
     if (!isAllowed()) return;
 
