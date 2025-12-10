@@ -31,72 +31,7 @@
         });
     }
 
-    // ---------------------------------------------------------
-    // Overlay full-screen 1.0 opacity "Se încarcă..."
-    // ---------------------------------------------------------
-    function showAyvensOverlay() {
-        if (document.getElementById("ayvens-autologin-overlay")) return;
-
-        const style = document.createElement("style");
-        style.textContent = `
-        #ayvens-autologin-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 1); /* 100% opac */
-            z-index: 999999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            font-family: Arial, sans-serif;
-            flex-direction: column;
-        }
-        #ayvens-autologin-spinner {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            border: 5px solid #fff;
-            border-top-color: transparent;
-            animation: ayvens-spin 0.8s linear infinite;
-            margin-bottom: 16px;
-        }
-        #ayvens-autologin-text {
-            font-size: 16px;
-            text-align: center;
-            white-space: pre-line;
-        }
-        @keyframes ayvens-spin {
-            to { transform: rotate(360deg); }
-        }
-        `;
-        document.head.appendChild(style);
-
-        const overlay = document.createElement("div");
-        overlay.id = "ayvens-autologin-overlay";
-
-        const spinner = document.createElement("div");
-        spinner.id = "ayvens-autologin-spinner";
-
-        const text = document.createElement("div");
-        text.id = "ayvens-autologin-text";
-        text.textContent = "Se încarcă, te conectăm automat la Ayvens...\nTe rugăm să nu închizi această fereastră.";
-
-        overlay.appendChild(spinner);
-        overlay.appendChild(text);
-
-        document.documentElement.appendChild(overlay);
-
-        console.log("[AUTOLOGIN-AYVENS] Overlay afișat.");
-    }
-
-    function hideAyvensOverlay() {
-        const overlay = document.getElementById("ayvens-autologin-overlay");
-        if (overlay) {
-            overlay.remove();
-            console.log("[AUTOLOGIN-AYVENS] Overlay ascuns.");
-        }
-    }
-
+ 
     // ---------------------------------------------------------
     // Bridge: cere credențialele de la extensie
     // ---------------------------------------------------------
