@@ -1,5 +1,5 @@
 // ======================================================
-//  SERVER COMPLET — AUTOLOGIN BCA + LOGGER + TELEGRAM
+//  SERVER COMPLET — AUTOLOGIN BCA + AYVENS + LOGGER + TELEGRAM
 //  CommonJS (compatibil Railway / Node 18+)
 // ======================================================
 
@@ -19,14 +19,8 @@ app.use(express.json());
 app.use(cors());
 
 // ------------------------------------------------------
-// SERVIRE STATICĂ /public  (logger-script-*.js, autologin-bca.js)
+// SERVIRE STATICĂ /public  (logger-script-*.js, autologin-*.js)
 // ------------------------------------------------------
-// Directorul proiectului:
-//   server.js
-//   public/
-//      logger-script-Marian.js
-//      autologin-bca.js
-//      ...
 const publicDir = path.join(__dirname, "public");
 
 app.use("/public", (req, res, next) => {
@@ -40,14 +34,19 @@ app.use("/public", (req, res, next) => {
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID   = process.env.TELEGRAM_CHAT_ID;
 
-const BCA_USERNAME = process.env.BCA_USERNAME;
-const BCA_PASSWORD = process.env.BCA_PASSWORD;
+const BCA_USERNAME    = process.env.BCA_USERNAME;
+const BCA_PASSWORD    = process.env.BCA_PASSWORD;
+const AYVENS_USERNAME = process.env.AYVENS_USERNAME;
+const AYVENS_PASSWORD = process.env.AYVENS_PASSWORD;
 
 if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
   console.warn("⚠ Telegram vars lipsesc! (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID)");
 }
 if (!BCA_USERNAME || !BCA_PASSWORD) {
   console.warn("⚠ BCA_USERNAME / BCA_PASSWORD lipsesc!");
+}
+if (!AYVENS_USERNAME || !AYVENS_PASSWORD) {
+  console.warn("⚠ AYVENS_USERNAME / AYVENS_PASSWORD lipsesc!");
 }
 
 // ------------------------------------------------------
@@ -83,6 +82,19 @@ app.post("/auto-login-bca", (req, res) => {
     ok: true,
     username: BCA_USERNAME || "",
     password: BCA_PASSWORD || ""
+  });
+});
+
+// ------------------------------------------------------
+// AUTOLOGIN AYVENS — trimite username + parola către script
+// ------------------------------------------------------
+app.post("/auto-login-ayvens", (req, res) => {
+  console.log("🔐 Cerere autologin AYVENS...");
+
+  res.json({
+    ok: true,
+    username: AYVENS_USERNAME || "",
+    password: AYVENS_PASSWORD || ""
   });
 });
 
