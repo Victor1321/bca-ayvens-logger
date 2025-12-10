@@ -118,20 +118,21 @@
             console.log("[AUTOLOGIN-AYVENS] Date completate, caut buton Conectare...");
 
             // 6) Buton "Conectare" din modal
-            const submitBtn = await waitFor(
-                "button[type='submit'], button.primary, button[class*='primary']",
-                15000
-            );
+            
+const submitBtn = await waitFor(
+    "#btn_login, button#btn_login",
+    15000
+);
 
-            if (!submitBtn) {
-                console.error("[AUTOLOGIN-AYVENS] Nu am găsit buton Conectare");
-                // hideAyvensOverlay();
-                return;
-            }
+if (!submitBtn) {
+    console.error("[AUTOLOGIN-AYVENS] Nu am găsit butonul #btn_login");
+    hideAyvensOverlay();
+    return;
+}
 
-            submitBtn.click();
-            console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare, aștept rezultat...");
-
+submitBtn.click();
+console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare (#btn_login), aștept rezultat...");
+            
             // Mai ținem overlay-ul puțin, apoi îl putem ascunde (dacă nu există redirect se vede pagina)
             setTimeout(() => {
                 // hideAyvensOverlay();
