@@ -84,7 +84,7 @@
             openLoginBtn.click();
 
             // 2) Overlayul lor de login apare, noi punem overlay-ul nostru peste
-            showAyvensOverlay();
+           // showAyvensOverlay();
 
             // 3) Așteptăm câmpurile username + parolă din modalul lor
             const userInput = await waitFor(
