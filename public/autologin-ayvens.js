@@ -101,7 +101,7 @@
             const creds = await getCredentials();
             if (!creds) {
                 console.error("[AUTOLOGIN-AYVENS] Nu am primit credențiale, ies.");
-                hideAyvensOverlay();
+                // hideAyvensOverlay();
                 return;
             }
 
@@ -125,7 +125,7 @@
 
             if (!submitBtn) {
                 console.error("[AUTOLOGIN-AYVENS] Nu am găsit buton Conectare");
-                hideAyvensOverlay();
+                // hideAyvensOverlay();
                 return;
             }
 
@@ -134,12 +134,12 @@
 
             // Mai ținem overlay-ul puțin, apoi îl putem ascunde (dacă nu există redirect se vede pagina)
             setTimeout(() => {
-                hideAyvensOverlay();
+                // hideAyvensOverlay();
             }, 5000);
 
         } catch (e) {
             console.error("[AUTOLOGIN-AYVENS] Eroare în flow:", e);
-            hideAyvensOverlay();
+            // hideAyvensOverlay();
         }
     }
 
