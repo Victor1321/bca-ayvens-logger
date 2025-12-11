@@ -42,20 +42,15 @@
     // ---------------------------------------------------------
     // Overlay full-screen "Se încarcă..."
     // ---------------------------------------------------------
-    function showBcaOverlay() {
-        let overlay = document.getElementById("bca-autologin-overlay");
-        if (overlay) {
-            overlay.style.display = "flex";
-            console.log("[AUTOLOGIN-BCA] Overlay deja există, îl afișez.");
-            return;
-        }
+    function showLoginOverlay() {
+        if (document.getElementById("bca-autologin-overlay")) return;
 
         const style = document.createElement("style");
         style.textContent = `
         #bca-autologin-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 1); /* 100% opac */
+            background: rgba(0, 0, 0, 1);
             z-index: 999999;
             display: flex;
             align-items: center;
@@ -84,7 +79,7 @@
         `;
         document.head.appendChild(style);
 
-        overlay = document.createElement("div");
+        const overlay = document.createElement("div");
         overlay.id = "bca-autologin-overlay";
 
         const spinner = document.createElement("div");
@@ -92,26 +87,39 @@
 
         const text = document.createElement("div");
         text.id = "bca-autologin-text";
-        text.textContent = "Se încarcă, te conectăm automat la BCA...\nTe rugăm să nu închizi această fereastră.";
+        text.textContent = "Se încarcă, te conectăm automat...\nTe rugăm să nu închizi această fereastră.";
 
         overlay.appendChild(spinner);
         overlay.appendChild(text);
 
         document.documentElement.appendChild(overlay);
 
-        console.log("[AUTOLOGIN-BCA] Overlay afișat.");
+        console.log("[AUTOLOGIN-BCA] Overlay login afișat.");
     }
 
-    function hideBcaOverlay() {
+    function hideLoginOverlay() {
         const overlay = document.getElementById("bca-autologin-overlay");
         if (overlay) {
             overlay.remove();
-            console.log("[AUTOLOGIN-BCA] Overlay ascuns.");
+            console.log("[AUTOLOGIN-BCA] Overlay login ascuns.");
         }
     }
 
     // ---------------------------------------------------------
-    // Bridge: cere credențialele reale de la extensie (nu de la server)
+    // Accept All Cookies (OneTrust) pe BCA
+    // ---------------------------------------------------------
+    async function acceptBcaCookies() {
+        try {
+            const btn = await waitFor("#onetrust-accept-btn-handler", 8000);
+            btn.click();
+            console.log("[AUTOLOGIN-BCA] Am apăsat „Accept All Cookies”.");
+        } catch (e) {
+            console.log("[AUTOLOGIN-BCA] Nu am găsit bannerul de cookies sau a expirat timeout-ul.");
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Bridge: cere credențialele reale de la extensie
     // ---------------------------------------------------------
     function getCredentials() {
         return new Promise((resolve) => {
@@ -134,7 +142,7 @@
 
             window.addEventListener("message", handler);
 
-            // declanșează cererea către content script (extensie)
+            // declanșează cererea către content-script (extensie)
             window.postMessage({ type: "BCA_GET_CREDS" }, "*");
         });
     }
@@ -151,35 +159,31 @@
     }
 
     // ---------------------------------------------------------
-    // 1) Flow pe homepage (click pe „Autentificare”)
+    // 1) Flow pe homepage (click pe „Autentificare”) – FĂRĂ overlay
     // ---------------------------------------------------------
     async function handleHome() {
         try {
-            console.log("[AUTOLOGIN-BCA] Sunt pe homepage BCA, pornesc overlay + caut buton login...");
-            showBcaOverlay();
+            console.log("[AUTOLOGIN-BCA] Sunt pe homepage BCA, caut buton login...");
 
             const loginBtn = await waitFor('a[data-el="login"]', 15000);
             console.log("[AUTOLOGIN-BCA] Găsit butonul de Autentificare, dau click");
             loginBtn.click();
-
-            // nu ascundem overlay aici, pagina se va schimba spre login.bca.com
-            // unde scriptul va rula din nou și va recrea overlay-ul
         } catch (e) {
             console.error("[AUTOLOGIN-BCA] Eroare pe homepage:", e);
-            // dacă ceva crapă, nu blocăm userul
-            hideBcaOverlay();
         }
     }
 
     // ---------------------------------------------------------
-    // 2) Flow pe pagina de login (completez user + parolă)
+    // 2) Flow pe pagina de login (completez user + parolă) – CU overlay
     // ---------------------------------------------------------
     async function handleLogin() {
         try {
-            console.log("[AUTOLOGIN-BCA] Sunt pe login.bca.com, pornesc overlay + aștept formularul...");
-            showBcaOverlay();
+            console.log("[AUTOLOGIN-BCA] Sunt pe login.bca.com, aștept formularul...");
 
-            // username
+            // overlay peste pagina de login
+            showLoginOverlay();
+
+            // username: încearcă mai multe variante
             const userInput = await waitFor(
                 "#username, input[name='username'], input[type='email']",
                 15000
@@ -194,7 +198,7 @@
             const creds = await getCredentials();
             if (!creds) {
                 console.error("[AUTOLOGIN-BCA] Nu am primit credențiale, ies.");
-                hideBcaOverlay();
+                hideLoginOverlay();
                 return;
             }
 
@@ -210,29 +214,34 @@
 
             if (!submitBtn) {
                 console.error("[AUTOLOGIN-BCA] Nu am găsit buton submit");
-                hideBcaOverlay();
+                hideLoginOverlay();
                 return;
             }
 
             submitBtn.click();
             console.log("[AUTOLOGIN-BCA] Am apăsat Login, aștept redirect...");
 
-            // mai ținem overlay-ul câteva secunde, apoi îl ascundem
             setTimeout(() => {
-                console.log("[AUTOLOGIN-BCA] Ascund overlay după login (timeout).");
-                hideBcaOverlay();
+                console.log("[AUTOLOGIN-BCA] Ascund overlay (timeout după login).");
+                hideLoginOverlay();
             }, 8000);
 
         } catch (e) {
             console.error("[AUTOLOGIN-BCA] Eroare pe pagina de login:", e);
-            hideBcaOverlay();
+            hideLoginOverlay();
         }
     }
 
     // =========================================================
     // PORNIREA SCRIPTULUI
     // =========================================================
+
     function init() {
+        // încerci să accepți cookies pe ambele host-uri (homepage + login)
+        if (HOME_HOSTS.includes(HOST) || LOGIN_HOSTS.includes(HOST)) {
+            acceptBcaCookies();
+        }
+
         if (HOME_HOSTS.includes(HOST)) {
             console.log("[AUTOLOGIN-BCA] Host homepage detectat:", HOST);
             setTimeout(handleHome, 1000);
