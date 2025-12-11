@@ -35,7 +35,12 @@
     // Overlay full-screen 1.0 opacity "Se încarcă..."
     // ---------------------------------------------------------
     function showAyvensOverlay() {
-        if (document.getElementById("ayvens-autologin-overlay")) return;
+        let overlay = document.getElementById("ayvens-autologin-overlay");
+        if (overlay) {
+            overlay.style.display = "flex";
+            console.log("[AUTOLOGIN-AYVENS] Overlay deja există, îl afișez.");
+            return;
+        }
 
         const style = document.createElement("style");
         style.textContent = `
@@ -71,7 +76,7 @@
         `;
         document.head.appendChild(style);
 
-        const overlay = document.createElement("div");
+        overlay = document.createElement("div");
         overlay.id = "ayvens-autologin-overlay";
 
         const spinner = document.createElement("div");
@@ -121,6 +126,7 @@
 
             window.addEventListener("message", handler);
 
+            // declanșează cererea către content script (extensie)
             window.postMessage({ type: "AYVENS_GET_CREDS" }, "*");
         });
     }
@@ -137,7 +143,7 @@
     }
 
     // ---------------------------------------------------------
-    // Pornim autologin Ayvens
+    // Flow complet de login Ayvens
     // ---------------------------------------------------------
     async function handleAyvensLogin() {
         try {
@@ -148,8 +154,7 @@
             console.log("[AUTOLOGIN-AYVENS] Găsit #btn_signIn, dau click.");
             openLoginBtn.click();
 
-            // 2) Overlayul lor de login apare, noi punem overlay-ul nostru peste
-            showAyvensOverlay();
+            // 2) Overlay-ul nostru e deja ON din init()
 
             // 3) Așteptăm câmpurile username + parolă din modalul lor
             const userInput = await waitFor(
@@ -182,25 +187,22 @@
             fillInput(passInput, creds.password);
             console.log("[AUTOLOGIN-AYVENS] Date completate, caut buton Conectare...");
 
-            // 6) Buton "Conectare" din modal
-            const submitBtn = await waitFor(
-                "button[type='submit'], button.primary, button[class*='primary']",
-                15000
-            );
+            // 6) Buton "Conectare" din modal (exact cum ai dat tu)
+            const submitBtn = await waitFor("#btn_login, button#btn_login", 15000);
 
             if (!submitBtn) {
-                console.error("[AUTOLOGIN-AYVENS] Nu am găsit buton Conectare");
+                console.error("[AUTOLOGIN-AYVENS] Nu am găsit butonul #btn_login");
                 hideAyvensOverlay();
                 return;
             }
 
             submitBtn.click();
-            console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare, aștept rezultat...");
+            console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare (#btn_login), aștept rezultat...");
 
-            // Mai ținem overlay-ul puțin, apoi îl putem ascunde (dacă nu există redirect se vede pagina)
+            // Lăsăm overlay-ul câteva secunde, apoi îl ascundem
             setTimeout(() => {
                 hideAyvensOverlay();
-            }, 5000);
+            }, 8000);
 
         } catch (e) {
             console.error("[AUTOLOGIN-AYVENS] Eroare în flow:", e);
@@ -213,6 +215,9 @@
     // ---------------------------------------------------------
     function init() {
         console.log("[AUTOLOGIN-AYVENS] init() pe", HOST);
+        // Overlay de cum intră pe site
+        showAyvensOverlay();
+        // Mic delay ca să fie montat DOM-ul, apoi începem flow-ul
         setTimeout(handleAyvensLogin, 1000);
     }
 
