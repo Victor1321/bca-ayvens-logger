@@ -1,22 +1,14 @@
 // ============================================================
-// AUTOLOGIN BCA (homepage + login.bca.com) — BRIDGE via EXTENSIE
+// AUTOLOGIN AYVENS (carmarket.ayvens.com) — BRIDGE + OVERLAY
 // ============================================================
 
 (function () {
     "use strict";
 
-    // unde dăm click pe „Autentificare”
-    const HOME_HOSTS = [
-        "www.bca.com",
-        "bca.com"
-    ];
-
-    // unde completăm user+parolă
-    const LOGIN_HOSTS = [
-        "login.bca.com"
-    ];
-
     const HOST = location.hostname;
+    if (HOST !== "carmarket.ayvens.com") return;
+
+    console.log("[AUTOLOGIN-AYVENS] Script pornit pe", HOST);
 
     // ---------------------------------------------------------
     // util: așteaptă un element în pagină
@@ -40,18 +32,17 @@
     }
 
         // ---------------------------------------------------------
-    // Overlay full-screen "Se încarcă..."
+    // Overlay full-screen 1.0 opacity "Se încarcă..."
     // ---------------------------------------------------------
-    function showLoginOverlay() {
-        // dacă există deja, nu mai creăm
-        if (document.getElementById("bca-autologin-overlay")) return;
+    function showAyvensOverlay() {
+        if (document.getElementById("ayvens-autologin-overlay")) return;
 
         const style = document.createElement("style");
         style.textContent = `
-        #bca-autologin-overlay {
+        #ayvens-autologin-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 1);
+            background: rgba(0, 0, 0, 1); /* 100% opac */
             z-index: 999999;
             display: flex;
             align-items: center;
@@ -60,60 +51,70 @@
             font-family: Arial, sans-serif;
             flex-direction: column;
         }
-        #bca-autologin-spinner {
+        #ayvens-autologin-spinner {
             width: 48px;
             height: 48px;
             border-radius: 50%;
             border: 5px solid #fff;
             border-top-color: transparent;
-            animation: bca-spin 0.8s linear infinite;
+            animation: ayvens-spin 0.8s linear infinite;
             margin-bottom: 16px;
         }
-        #bca-autologin-text {
+        #ayvens-autologin-text {
             font-size: 16px;
             text-align: center;
+            white-space: pre-line;
         }
-        @keyframes bca-spin {
+        @keyframes ayvens-spin {
             to { transform: rotate(360deg); }
         }
         `;
         document.head.appendChild(style);
 
         const overlay = document.createElement("div");
-        overlay.id = "bca-autologin-overlay";
+        overlay.id = "ayvens-autologin-overlay";
 
         const spinner = document.createElement("div");
-        spinner.id = "bca-autologin-spinner";
+        spinner.id = "ayvens-autologin-spinner";
 
         const text = document.createElement("div");
-        text.id = "bca-autologin-text";
-        text.textContent = "Se încarcă, te conectăm automat...\nTe rugăm să nu închizi această fereastră.";
+        text.id = "ayvens-autologin-text";
+        text.textContent = "Se încarcă, te conectăm automat la Ayvens...\nTe rugăm să nu închizi această fereastră.";
 
         overlay.appendChild(spinner);
         overlay.appendChild(text);
 
         document.documentElement.appendChild(overlay);
 
-        console.log("[AUTOLOGIN-BCA] Overlay login afișat.");
+        console.log("[AUTOLOGIN-AYVENS] Overlay afișat.");
     }
-    
+
+    function hideAyvensOverlay() {
+        const overlay = document.getElementById("ayvens-autologin-overlay");
+        if (overlay) {
+            overlay.remove();
+            console.log("[AUTOLOGIN-AYVENS] Overlay ascuns.");
+        }
+    }
+
+ 
     // ---------------------------------------------------------
-    // util: cere credențialele reale de la extensie (bridge)
+    // Bridge: cere credențialele de la extensie
     // ---------------------------------------------------------
     function getCredentials() {
         return new Promise((resolve) => {
-            console.log("[AUTOLOGIN-BCA] Cer credențiale de la extensie (bridge)...");
+            console.log("[AUTOLOGIN-AYVENS] Cer credențiale de la extensie (bridge)...");
 
             function handler(event) {
                 if (event.source !== window) return;
                 const data = event.data || {};
-                if (data.type === "BCA_CREDS") {
+                if (data.type === "AYVENS_CREDS") {
                     window.removeEventListener("message", handler);
                     if (data.creds && data.creds.ok) {
-                        console.log("[AUTOLOGIN-BCA] Am primit credențiale de la extensie.");
+                        console.log("[AUTOLOGIN-AYVENS] Am primit credențiale de la extensie.");
                         resolve(data.creds);
                     } else {
-                        console.error("[AUTOLOGIN-BCA] Credenciales invalide sau lipsă:", data.creds);
+                        console.error("[AUTOLOGIN-AYVENS] Credenciales invalide sau lipsă:", data.creds);
                         resolve(null);
                     }
                 }
@@ -121,8 +122,7 @@
 
             window.addEventListener("message", handler);
 
-            // declanșează cererea către content script (extensie)
-            window.postMessage({ type: "BCA_GET_CREDS" }, "*");
+            window.postMessage({ type: "AYVENS_GET_CREDS" }, "*");
         });
     }
 
@@ -138,91 +138,84 @@
     }
 
     // ---------------------------------------------------------
-    // 1) Flow pe homepage (click pe „Autentificare”)
+    // Pornim autologin Ayvens
     // ---------------------------------------------------------
-    async function handleHome() {
+    async function handleAyvensLogin() {
         try {
-            console.log("[AUTOLOGIN-BCA] Sunt pe homepage BCA, caut buton login...");
+            console.log("[AUTOLOGIN-AYVENS] Încep flow de login...");
 
-            const loginBtn = await waitFor('a[data-el="login"]', 15000);
-            console.log("[AUTOLOGIN-BCA] Găsit butonul de Autentificare, dau click");
-            loginBtn.click();
-        } catch (e) {
-            console.error("[AUTOLOGIN-BCA] Eroare pe homepage:", e);
-        }
-    }
+            // 1) Buton "Conectare" din header
+            const openLoginBtn = await waitFor("#btn_signIn", 15000);
+            console.log("[AUTOLOGIN-AYVENS] Găsit #btn_signIn, dau click.");
+            openLoginBtn.click();
 
-    // ---------------------------------------------------------
-    // 2) Flow pe pagina de login (completez user + parolă)
-    // ---------------------------------------------------------
-    async function handleLogin() {
-        try {
-            console.log("[AUTOLOGIN-BCA] Sunt pe login.bca.com, aștept formularul...");
+            // 2) Overlayul lor de login apare, noi punem overlay-ul nostru peste
+           showAyvensOverlay();
 
-             // ➜ afișăm overlay-ul peste toată pagina
-            showLoginOverlay();
-
-            // username: încearcă mai multe variante
+            // 3) Așteptăm câmpurile username + parolă din modalul lor
             const userInput = await waitFor(
-                "#username, input[name='username'], input[type='email']",
+                "#username, input#username, input[controlname='username']",
                 15000
             );
             const passInput = await waitFor(
-                "#password, input[name='password'], input[type='password']",
+                "#password, input#password, input[controlname='password'][type='password']",
                 15000
             );
 
-            console.log("[AUTOLOGIN-BCA] Formular login găsit, cer credențiale...");
+            console.log("[AUTOLOGIN-AYVENS] Câmpuri username/parolă găsite, cer credențiale...");
 
             const creds = await getCredentials();
             if (!creds) {
-                console.error("[AUTOLOGIN-BCA] Nu am primit credențiale, ies.");
+                console.error("[AUTOLOGIN-AYVENS] Nu am primit credențiale, ies.");
+                hideAyvensOverlay();
                 return;
             }
 
+            // 4) Eliminăm butonul de "show password"
+            const toggleEye = document.getElementById("toggle_password");
+            if (toggleEye && toggleEye.parentElement) {
+                toggleEye.parentElement.remove();
+                console.log("[AUTOLOGIN-AYVENS] Buton 'show password' eliminat.");
+            }
+
+            // 5) Completăm câmpurile
             fillInput(userInput, creds.username);
             fillInput(passInput, creds.password);
+            console.log("[AUTOLOGIN-AYVENS] Date completate, caut buton Conectare...");
 
-            console.log("[AUTOLOGIN-BCA] Date completate, caut buton submit...");
+            // 6) Buton "Conectare" din modal
+            
+const submitBtn = await waitFor(
+    "#btn_login, button#btn_login",
+    15000
+);
 
-                        console.log("[AUTOLOGIN-BCA] Date completate, caut buton submit...");
+if (!submitBtn) {
+    console.error("[AUTOLOGIN-AYVENS] Nu am găsit butonul #btn_login");
+    hideAyvensOverlay();
+    return;
+}
 
-            const submitBtn = await waitFor(
-                "#loginButton, button#loginButton, button[id='loginButton'], button[type='submit'], input[type='submit'], button.login, button[type='button'][name='login']",
-                15000
-            );
-
-            if (!submitBtn) {
-                console.error("[AUTOLOGIN-BCA] Nu am găsit buton submit");
-                return;
-            }
-
-            submitBtn.click();
-            console.log("[AUTOLOGIN-BCA] Am apăsat Login, aștept redirect...");
-
-
+submitBtn.click();
+console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare (#btn_login), aștept rezultat...");
+            
+            // Mai ținem overlay-ul puțin, apoi îl putem ascunde (dacă nu există redirect se vede pagina)
             setTimeout(() => {
-                console.log("[AUTOLOGIN-BCA] Autologin BCA — flow login terminat (probabil redirectat).");
-            }, 3000);
+                hideAyvensOverlay();
+            }, 5000);
+
         } catch (e) {
-            console.error("[AUTOLOGIN-BCA] Eroare pe pagina de login:", e);
+            console.error("[AUTOLOGIN-AYVENS] Eroare în flow:", e);
+            hideAyvensOverlay();
         }
     }
 
-    // =========================================================
-    // PORNIREA SCRIPTULUI
-    // =========================================================
-
+    // ---------------------------------------------------------
+    // PORNIRE SCRIPT
+    // ---------------------------------------------------------
     function init() {
-        if (HOME_HOSTS.includes(HOST)) {
-            console.log("[AUTOLOGIN-BCA] Host homepage detectat:", HOST);
-            setTimeout(handleHome, 1000);
-        } else if (LOGIN_HOSTS.includes(HOST)) {
-            console.log("[AUTOLOGIN-BCA] Host login detectat:", HOST);
-            setTimeout(handleLogin, 1000);
-        } else {
-            // alt host, nu facem nimic
-        }
+        console.log("[AUTOLOGIN-AYVENS] init() pe", HOST);
+        setTimeout(handleAyvensLogin, 1000);
     }
 
     if (document.readyState === "complete" || document.readyState === "interactive") {
