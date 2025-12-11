@@ -5,7 +5,7 @@
 (function () {
     "use strict";
 
-    var HOST = window.location.hostname;
+    const HOST = location.hostname;
     if (HOST !== "carmarket.ayvens.com") return;
 
     console.log("[AUTOLOGIN-AYVENS] Script pornit pe", HOST);
@@ -13,13 +13,11 @@
     // ---------------------------------------------------------
     // util: așteaptă un element în pagină
     // ---------------------------------------------------------
-    function waitFor(selector, timeout) {
-        timeout = typeof timeout === "number" ? timeout : 10000;
-
-        return new Promise(function (resolve, reject) {
-            var start = Date.now();
-            var timer = setInterval(function () {
-                var el = document.querySelector(selector);
+    function waitFor(selector, timeout = 10000) {
+        return new Promise((resolve, reject) => {
+            const start = Date.now();
+            const timer = setInterval(() => {
+                const el = document.querySelector(selector);
                 if (el) {
                     clearInterval(timer);
                     resolve(el);
@@ -36,59 +34,50 @@
     // ---------------------------------------------------------
     // Overlay full-screen 1.0 opacity "Se încarcă..."
     // ---------------------------------------------------------
-    var ayvensOverlayStyleInjected = false;
-
     function showAyvensOverlay() {
-        var existing = document.getElementById("ayvens-autologin-overlay");
-        if (existing) {
-            existing.style.display = "flex";
-            console.log("[AUTOLOGIN-AYVENS] Overlay deja există, îl afișez.");
-            return;
-        }
+        if (document.getElementById("ayvens-autologin-overlay")) return;
 
-        if (!ayvensOverlayStyleInjected) {
-            var style = document.createElement("style");
-            style.textContent =
-                "#ayvens-autologin-overlay {" +
-                "  position: fixed;" +
-                "  inset: 0;" +
-                "  background: rgba(0, 0, 0, 1);" + // 100% opac
-                "  z-index: 999999;" +
-                "  display: flex;" +
-                "  align-items: center;" +
-                "  justify-content: center;" +
-                "  color: #fff;" +
-                "  font-family: Arial, sans-serif;" +
-                "  flex-direction: column;" +
-                "}" +
-                "#ayvens-autologin-spinner {" +
-                "  width: 48px;" +
-                "  height: 48px;" +
-                "  border-radius: 50%;" +
-                "  border: 5px solid #fff;" +
-                "  border-top-color: transparent;" +
-                "  animation: ayvens-spin 0.8s linear infinite;" +
-                "  margin-bottom: 16px;" +
-                "}" +
-                "#ayvens-autologin-text {" +
-                "  font-size: 16px;" +
-                "  text-align: center;" +
-                "  white-space: pre-line;" +
-                "}" +
-                "@keyframes ayvens-spin {" +
-                "  to { transform: rotate(360deg); }" +
-                "}";
-            document.head.appendChild(style);
-            ayvensOverlayStyleInjected = true;
+        const style = document.createElement("style");
+        style.textContent = `
+        #ayvens-autologin-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 1); /* 100% opac */
+            z-index: 999999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            flex-direction: column;
         }
+        #ayvens-autologin-spinner {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 5px solid #fff;
+            border-top-color: transparent;
+            animation: ayvens-spin 0.8s linear infinite;
+            margin-bottom: 16px;
+        }
+        #ayvens-autologin-text {
+            font-size: 16px;
+            text-align: center;
+            white-space: pre-line;
+        }
+        @keyframes ayvens-spin {
+            to { transform: rotate(360deg); }
+        }
+        `;
+        document.head.appendChild(style);
 
-        var overlay = document.createElement("div");
+        const overlay = document.createElement("div");
         overlay.id = "ayvens-autologin-overlay";
 
-        var spinner = document.createElement("div");
+        const spinner = document.createElement("div");
         spinner.id = "ayvens-autologin-spinner";
 
-        var text = document.createElement("div");
+        const text = document.createElement("div");
         text.id = "ayvens-autologin-text";
         text.textContent = "Se încarcă, te conectăm automat la Ayvens...\nTe rugăm să nu închizi această fereastră.";
 
@@ -101,7 +90,7 @@
     }
 
     function hideAyvensOverlay() {
-        var overlay = document.getElementById("ayvens-autologin-overlay");
+        const overlay = document.getElementById("ayvens-autologin-overlay");
         if (overlay) {
             overlay.remove();
             console.log("[AUTOLOGIN-AYVENS] Overlay ascuns.");
@@ -112,12 +101,12 @@
     // Bridge: cere credențialele de la extensie
     // ---------------------------------------------------------
     function getCredentials() {
-        return new Promise(function (resolve) {
+        return new Promise((resolve) => {
             console.log("[AUTOLOGIN-AYVENS] Cer credențiale de la extensie (bridge)...");
 
             function handler(event) {
                 if (event.source !== window) return;
-                var data = event.data || {};
+                const data = event.data || {};
                 if (data.type === "AYVENS_CREDS") {
                     window.removeEventListener("message", handler);
                     if (data.creds && data.creds.ok) {
@@ -148,74 +137,75 @@
     }
 
     // ---------------------------------------------------------
-    // Flow complet de login Ayvens
+    // Pornim autologin Ayvens
     // ---------------------------------------------------------
-    function handleAyvensLogin() {
-        (async function () {
-            try {
-                console.log("[AUTOLOGIN-AYVENS] Încep flow de login...");
+    async function handleAyvensLogin() {
+        try {
+            console.log("[AUTOLOGIN-AYVENS] Încep flow de login...");
 
-                // 1) Buton "Conectare" din header
-                var openLoginBtn = await waitFor("#btn_signIn", 15000);
-                console.log("[AUTOLOGIN-AYVENS] Găsit #btn_signIn, dau click.");
-                openLoginBtn.click();
+            // 1) Buton "Conectare" din header
+            const openLoginBtn = await waitFor("#btn_signIn", 15000);
+            console.log("[AUTOLOGIN-AYVENS] Găsit #btn_signIn, dau click.");
+            openLoginBtn.click();
 
-                // 2) Așteptăm câmpurile username + parolă din modalul lor
-                var userInput = await waitFor(
-                    "#username, input#username, input[controlname='username']",
-                    15000
-                );
-                var passInput = await waitFor(
-                    "#password, input#password, input[controlname='password'][type='password']",
-                    15000
-                );
+            // 2) Overlayul lor de login apare, noi punem overlay-ul nostru peste
+            showAyvensOverlay();
 
-                console.log("[AUTOLOGIN-AYVENS] Câmpuri username/parolă găsite, cer credențiale...");
+            // 3) Așteptăm câmpurile username + parolă din modalul lor
+            const userInput = await waitFor(
+                "#username, input#username, input[controlname='username']",
+                15000
+            );
+            const passInput = await waitFor(
+                "#password, input#password, input[controlname='password'][type='password']",
+                15000
+            );
 
-                var creds = await getCredentials();
-                if (!creds) {
-                    console.error("[AUTOLOGIN-AYVENS] Nu am primit credențiale, ies.");
-                    hideAyvensOverlay();
-                    return;
-                }
+            console.log("[AUTOLOGIN-AYVENS] Câmpuri username/parolă găsite, cer credențiale...");
 
-                // 3) Eliminăm butonul de "show password"
-                var toggleEye = document.getElementById("toggle_password");
-                if (toggleEye && toggleEye.parentElement) {
-                    toggleEye.parentElement.remove();
-                    console.log("[AUTOLOGIN-AYVENS] Buton 'show password' eliminat.");
-                }
-
-                // 4) Completăm câmpurile
-                fillInput(userInput, creds.username);
-                fillInput(passInput, creds.password);
-                console.log("[AUTOLOGIN-AYVENS] Date completate, caut buton Conectare...");
-
-                // 5) Buton "Conectare" din modal
-                var submitBtn = await waitFor(
-                    "#btn_login, button#btn_login",
-                    15000
-                );
-
-                if (!submitBtn) {
-                    console.error("[AUTOLOGIN-AYVENS] Nu am găsit butonul #btn_login");
-                    hideAyvensOverlay();
-                    return;
-                }
-
-                submitBtn.click();
-                console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare (#btn_login), aștept rezultat...");
-
-                // Mai ținem overlay-ul puțin, apoi îl ascundem
-                setTimeout(function () {
-                    hideAyvensOverlay();
-                }, 8000);
-
-            } catch (e) {
-                console.error("[AUTOLOGIN-AYVENS] Eroare în flow:", e);
+            const creds = await getCredentials();
+            if (!creds) {
+                console.error("[AUTOLOGIN-AYVENS] Nu am primit credențiale, ies.");
                 hideAyvensOverlay();
+                return;
             }
-        })();
+
+            // 4) Eliminăm butonul de "show password"
+            const toggleEye = document.getElementById("toggle_password");
+            if (toggleEye && toggleEye.parentElement) {
+                toggleEye.parentElement.remove();
+                console.log("[AUTOLOGIN-AYVENS] Buton 'show password' eliminat.");
+            }
+
+            // 5) Completăm câmpurile
+            fillInput(userInput, creds.username);
+            fillInput(passInput, creds.password);
+            console.log("[AUTOLOGIN-AYVENS] Date completate, caut buton Conectare...");
+
+            // 6) Buton "Conectare" din modal
+            const submitBtn = await waitFor(
+                "button[type='submit'], button.primary, button[class*='primary']",
+                15000
+            );
+
+            if (!submitBtn) {
+                console.error("[AUTOLOGIN-AYVENS] Nu am găsit buton Conectare");
+                hideAyvensOverlay();
+                return;
+            }
+
+            submitBtn.click();
+            console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare, aștept rezultat...");
+
+            // Mai ținem overlay-ul puțin, apoi îl putem ascunde (dacă nu există redirect se vede pagina)
+            setTimeout(() => {
+                hideAyvensOverlay();
+            }, 5000);
+
+        } catch (e) {
+            console.error("[AUTOLOGIN-AYVENS] Eroare în flow:", e);
+            hideAyvensOverlay();
+        }
     }
 
     // ---------------------------------------------------------
@@ -223,9 +213,6 @@
     // ---------------------------------------------------------
     function init() {
         console.log("[AUTOLOGIN-AYVENS] init() pe", HOST);
-        // Overlay de cum intră pe site
-        showAyvensOverlay();
-        // Mic delay ca să fie montat DOM-ul, apoi începem flow-ul
         setTimeout(handleAyvensLogin, 1000);
     }
 
