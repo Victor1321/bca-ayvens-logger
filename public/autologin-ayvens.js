@@ -35,12 +35,7 @@
     // Overlay full-screen 1.0 opacity "Se încarcă..."
     // ---------------------------------------------------------
     function showAyvensOverlay() {
-        let overlay = document.getElementById("ayvens-autologin-overlay");
-        if (overlay) {
-            overlay.style.display = "flex";
-            console.log("[AUTOLOGIN-AYVENS] Overlay deja există, îl afișez.");
-            return;
-        }
+        if (document.getElementById("ayvens-autologin-overlay")) return;
 
         const style = document.createElement("style");
         style.textContent = `
@@ -76,7 +71,7 @@
         `;
         document.head.appendChild(style);
 
-        overlay = document.createElement("div");
+        const overlay = document.createElement("div");
         overlay.id = "ayvens-autologin-overlay";
 
         const spinner = document.createElement("div");
@@ -99,6 +94,19 @@
         if (overlay) {
             overlay.remove();
             console.log("[AUTOLOGIN-AYVENS] Overlay ascuns.");
+        }
+    }
+
+    // ---------------------------------------------------------
+    // Accept All Cookies (OneTrust) pe Ayvens
+    // ---------------------------------------------------------
+    async function acceptAyvensCookies() {
+        try {
+            const btn = await waitFor("#onetrust-accept-btn-handler", 8000);
+            btn.click();
+            console.log("[AUTOLOGIN-AYVENS] Am apăsat „Accept All Cookies”.");
+        } catch (e) {
+            console.log("[AUTOLOGIN-AYVENS] Nu am găsit bannerul de cookies sau a expirat timeout-ul.");
         }
     }
 
@@ -126,7 +134,6 @@
 
             window.addEventListener("message", handler);
 
-            // declanșează cererea către content script (extensie)
             window.postMessage({ type: "AYVENS_GET_CREDS" }, "*");
         });
     }
@@ -143,7 +150,7 @@
     }
 
     // ---------------------------------------------------------
-    // Flow complet de login Ayvens
+    // Flow complet de login Ayvens (overlay doar în timpul flow-ului)
     // ---------------------------------------------------------
     async function handleAyvensLogin() {
         try {
@@ -154,7 +161,8 @@
             console.log("[AUTOLOGIN-AYVENS] Găsit #btn_signIn, dau click.");
             openLoginBtn.click();
 
-            // 2) Overlay-ul nostru e deja ON din init()
+            // 2) Overlay-ul nostru peste overlay-ul lor
+            showAyvensOverlay();
 
             // 3) Așteptăm câmpurile username + parolă din modalul lor
             const userInput = await waitFor(
@@ -187,8 +195,11 @@
             fillInput(passInput, creds.password);
             console.log("[AUTOLOGIN-AYVENS] Date completate, caut buton Conectare...");
 
-            // 6) Buton "Conectare" din modal (exact cum ai dat tu)
-            const submitBtn = await waitFor("#btn_login, button#btn_login", 15000);
+            // 6) Buton "Conectare" din modal (#btn_login)
+            const submitBtn = await waitFor(
+                "#btn_login, button#btn_login",
+                15000
+            );
 
             if (!submitBtn) {
                 console.error("[AUTOLOGIN-AYVENS] Nu am găsit butonul #btn_login");
@@ -199,10 +210,9 @@
             submitBtn.click();
             console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare (#btn_login), aștept rezultat...");
 
-            // Lăsăm overlay-ul câteva secunde, apoi îl ascundem
             setTimeout(() => {
                 hideAyvensOverlay();
-            }, 8000);
+            }, 5000);
 
         } catch (e) {
             console.error("[AUTOLOGIN-AYVENS] Eroare în flow:", e);
@@ -215,9 +225,11 @@
     // ---------------------------------------------------------
     function init() {
         console.log("[AUTOLOGIN-AYVENS] init() pe", HOST);
-        // Overlay de cum intră pe site
-        showAyvensOverlay();
-        // Mic delay ca să fie montat DOM-ul, apoi începem flow-ul
+
+        // acceptă cookies cât mai devreme
+        acceptAyvensCookies();
+
+        // mic delay ca să fie montat DOM-ul, apoi începem flow-ul
         setTimeout(handleAyvensLogin, 1000);
     }
 
