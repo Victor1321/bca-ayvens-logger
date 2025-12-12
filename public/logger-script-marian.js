@@ -9,63 +9,54 @@
     // --------------------------
     // CONFIG
     // --------------------------
+    // ATENTIE: endpoint-ul real din server.js
     const SERVER_URL = "https://bca-ayvens.up.railway.app/receive-bid";
     const CLIENT_ID = "Marian";
 
-    // cuvinte cheie in butoane / URL / body
-    const BID_KEYWORDS = ["bid", "licit", "offer", "oferta", "place", "submit", "auktion", "auction"];
-
-    // domenii pe care activam logger-ul
     const ALLOWED_HOSTS = [
         "ee.bca-europe.com",
         "idp.bca-online-auctions.eu",
         "carmarket.ayvens.com"
     ];
 
-    // ferestre de timp
-    const CLICK_WINDOW_MS = 5000;   // cat timp legam un request de un click
-    const DEDUP_TTL_MS    = 5000;   // cat timp consideram acelasi bid "duplicat"
+    const CLICK_WINDOW_MS = 5000;  // fereastra in care urmarim request-ul dupa click
+    const DEDUP_WINDOW_MS = 3000;  // nu trimitem acelasi bid de 2 ori in < 3 sec
 
-    // stare in memorie
     let lastClickInfo = null;
-
-    // dedup global pe window (daca exista mai multe scripturi injectate)
-    const globalState = (window._LOGGER_DEDUP_ = window._LOGGER_DEDUP_ || {
-        sent: {}   // sig -> timestamp
-    });
+    let lastSentSignature = null;
+    let lastSentTime = 0;
 
     // --------------------------
-    // Helpers
+    // Helpers de baza
     // --------------------------
     function now() { return Date.now(); }
 
-    function isAllowed() {
+    function isAllowedHost() {
         return ALLOWED_HOSTS.includes(location.hostname);
     }
 
-    function textContainsKeyword(text) {
-        if (!text) return false;
-        const lower = text.toLowerCase();
-        return BID_KEYWORDS.some(k => lower.includes(k));
+    if (!isAllowedHost()) {
+        return; // nu rulam pe alte site-uri
     }
 
+    console.log("[LOGGER] Pornit pe host:", location.hostname);
+
+    // extrage numar in format european (10.500,00 -> 10500)
     function extractNumberEU(text) {
         if (!text) return null;
-        text = String(text);
-        text = text.replace(/[^0-9.,]/g, "");
+        text = String(text).replace(/[^0-9.,]/g, "");
         if (!text) return null;
         const std = text.replace(/\./g, "").replace(",", ".");
         const nr = parseFloat(std);
-        if (isNaN(nr)) return null;
-        // filtram prostiile
-        if (nr < 50 || nr > 5000000) return null;
-        return nr;
+        // limitam la range normal de licitatii
+        return isNaN(nr) || nr < 50 || nr > 500000 ? null : nr;
     }
 
     function findValueInInputs() {
         const inputs = document.querySelectorAll("input[type='text'], input[type='number']");
+
         for (const inp of inputs) {
-            if (!inp.offsetParent) continue; // skip ascunse
+            if (!inp.offsetParent) continue; // ascunse
             const nr = extractNumberEU(inp.value);
             if (nr) return nr;
         }
@@ -93,25 +84,24 @@
     function extractItemTitle(btn) {
         const host = location.hostname;
 
-        // Ayvens – incearca sa ia titlul de masina din card / pagina detaliu
+        // Ayvens - combina titlu principal + sublinie
         if (host.includes("carmarket.ayvens.com")) {
-            // card in lista
             const card = btn?.closest("article, .vehicle, .listing-item, .offer-item, .card");
             if (card) {
-                const titleNode = card.querySelector(".vehicle-title, h2, h3");
-                const subtitle  = card.querySelector(".vehicle-make, .vehicle-subtitle, .subtitle");
-                const t1 = titleNode ? titleNode.textContent.trim() : "";
-                const t2 = subtitle  ? subtitle.textContent.trim()   : "";
+                // Ayvens sale page:
+                // <h2 class="vehicle-title">... <span>...</span></h2>
+                const h2 = card.querySelector("h2.vehicle-title");
+                const make = card.querySelector("p.vehicle-make");
+
+                const t1 = h2 ? (h2.textContent || "").trim() : "";
+                const t2 = make ? make.textContent.trim() : "";
+
                 const full = [t1, t2].filter(Boolean).join(" ");
                 if (full) return full;
             }
-
-            // pagina de detaliu – de obicei <h1>
-            const h1 = document.querySelector("h1.vehicle-title, h1");
-            if (h1 && h1.textContent.trim()) return h1.textContent.trim();
         }
 
-        // BCA (view lot)
+        // BCA (functioneaza pe pagina de lot)
         const bca = document.querySelector("h2.viewlot_headline.viewlot_headline--large");
         if (bca && bca.innerText.trim()) return bca.innerText.trim();
 
@@ -121,29 +111,21 @@
     }
 
     // --------------------------
-    // Imagine – BCA + Ayvens
+    // Imagine – Ayvens + BCA
     // --------------------------
     function extractImageUrl(btn) {
         const host = location.hostname;
 
+        // Ayvens: img de tip vehicle-default-picture / vehicle-picture
         if (host.includes("carmarket.ayvens.com")) {
-            // 1) imaginea default de pe pagina de detaliu
-            let img = document.querySelector("img[id^='vehicle-default-picture-']");
-            if (img && img.src) return img.src;
+            let img =
+                document.querySelector(".vehicle-picture img") ||
+                document.querySelector("img[id^='vehicle-default-picture']");
 
-            // 2) din cardul din lista
-            const card = btn?.closest("article, .vehicle, .listing-item, .offer-item, .card, .vehicle-card");
-            if (card) {
-                img = card.querySelector(".vehicle-picture img, img");
-                if (img && img.src) return img.src;
-            }
-
-            // 3) fallback: orice imagine relevanta de masina
-            img = document.querySelector(".vehicle-picture img, .car-picture img");
             if (img && img.src) return img.src;
         }
 
-        // BCA – imagini principale din pagina lotului
+        // BCA (view lot)
         let img = document.querySelector(".viewlot__img img.MainImg");
         if (img && img.src) return img.src;
 
@@ -154,7 +136,7 @@
     }
 
     // --------------------------
-    // Timestamp local GMT+2 (hardcod)
+    // Timestamp local GMT+2
     // --------------------------
     function timestamp() {
         const d = new Date(Date.now() + 2 * 3600000);
@@ -162,25 +144,16 @@
     }
 
     // --------------------------
-    // Dedup global
+    // Dedup (fara timestamp in semnatura!)
     // --------------------------
-    function shouldSend(payload) {
-        const sigObj = {
-            host: location.hostname,
-            link: payload.item_link,
-            title: payload.item_title,
-            amount: payload.bid_amount
-        };
-        const sig = JSON.stringify(sigObj);
+    function shouldSend(sig) {
         const t = now();
-        const last = globalState.sent[sig] || 0;
-
-        if (t - last < DEDUP_TTL_MS) {
-            console.log("[LOGGER] Skip DUPLICAT (", (t - last), "ms )", sigObj);
+        if (lastSentSignature === sig && t - lastSentTime < DEDUP_WINDOW_MS) {
+            console.log("[LOGGER] DEDUP: deja trimis recent, sar peste.");
             return false;
         }
-
-        globalState.sent[sig] = t;
+        lastSentSignature = sig;
+        lastSentTime = t;
         return true;
     }
 
@@ -188,7 +161,7 @@
     // Payload Builder
     // --------------------------
     function buildPayload(amount, sourceTag, btn) {
-        const data = {
+        return {
             client_id: CLIENT_ID,
             item_link: location.href,
             item_title: extractItemTitle(btn),
@@ -198,14 +171,19 @@
             source: sourceTag,
             image_url: extractImageUrl(btn)
         };
-        return data;
     }
 
     // --------------------------
     // Send to server
     // --------------------------
     function sendToServer(data) {
-        if (!shouldSend(data)) return;
+        const sig = JSON.stringify({
+            client_id: data.client_id,
+            item_link: data.item_link,
+            bid_amount: data.bid_amount
+        });
+
+        if (!shouldSend(sig)) return;
 
         console.log("[LOGGER] Trimit catre server:", data);
 
@@ -213,47 +191,52 @@
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(data)
-        })
-            .then(r => r.json().catch(() => ({})))
-            .then(res => {
-                console.log("[LOGGER] Raspuns server:", res);
-            })
-            .catch(err => console.error("[LOGGER] Eroare send:", err));
+        }).catch(err => console.error("[LOGGER] Eroare send:", err));
     }
 
     // =========================================================
-    // START – Script activ doar pe host-urile permise
+    // CLICK detector – FARA KEYWORDS, DOAR SUME
     // =========================================================
-    if (!isAllowed()) {
-        return;
-    }
-
-    console.log("[LOGGER] Pornit pe host:", location.hostname);
-
-    // --------------------------
-    // CLICK detector
-    // --------------------------
     document.addEventListener("click", e => {
         const btn = e.target.closest("button, a, input[type='submit']");
         if (!btn) return;
 
-        const txt = (btn.innerText || btn.value || "").trim();
-        if (!textContainsKeyword(txt)) return;
+        const amount =
+            findValueInInputs() ||
+            findNumberInText(btn) ||
+            scanNearbyForNumber(btn);
 
-        const amount = findValueInInputs() || findNumberInText(btn) || scanNearbyForNumber(btn);
+        if (!amount) {
+            // fara suma in jur, probabil nu e bid
+            return;
+        }
+
+        const txt = (btn.innerText || btn.value || "").trim();
+        console.log("[LOGGER] Click candidat:", { text: txt, amount });
 
         lastClickInfo = {
             time: now(),
-            domAmount: amount || null,
-            btn
+            domAmount: amount,
+            btn,
+            sent: false
         };
 
-        console.log("[LOGGER] CLICK detectat pe buton cu text:", txt, " | amount DOM:", amount);
+        // fallback daca nu prindem niciun request in CLICK_WINDOW_MS
+        setTimeout(() => {
+            if (!lastClickInfo) return;
+            const age = now() - lastClickInfo.time;
+            if (age > CLICK_WINDOW_MS && !lastClickInfo.sent && lastClickInfo.domAmount) {
+                console.log("[LOGGER] Fallback DOM, trimit bid:", lastClickInfo.domAmount);
+                const payload = buildPayload(lastClickInfo.domAmount, "dom-fallback", lastClickInfo.btn);
+                sendToServer(payload);
+                lastClickInfo.sent = true;
+            }
+        }, CLICK_WINDOW_MS + 200);
     });
 
-    // --------------------------
+    // =========================================================
     // Request Interceptor – FETCH
-    // --------------------------
+    // =========================================================
     (function () {
         const orig = window.fetch;
         window.fetch = function (input, init) {
@@ -261,16 +244,14 @@
                 const url = typeof input === "string" ? input : input.url;
                 const body = init?.body || null;
                 handleRequest(url, body, "fetch");
-            } catch (err) {
-                console.warn("[LOGGER] Eroare interceptare fetch:", err);
-            }
+            } catch (err) { /* ignoram erori interne */ }
             return orig.apply(this, arguments);
         };
     })();
 
-    // --------------------------
+    // =========================================================
     // Request Interceptor – XHR
-    // --------------------------
+    // =========================================================
     (function () {
         const O = XMLHttpRequest.prototype.open;
         const S = XMLHttpRequest.prototype.send;
@@ -281,11 +262,7 @@
         };
 
         XMLHttpRequest.prototype.send = function (body) {
-            try {
-                handleRequest(this._url, body, "xhr");
-            } catch (err) {
-                console.warn("[LOGGER] Eroare interceptare XHR:", err);
-            }
+            handleRequest(this._url, body, "xhr");
             return S.apply(this, arguments);
         };
     })();
@@ -297,8 +274,8 @@
         if (!lastClickInfo) return;
         if (now() - lastClickInfo.time > CLICK_WINDOW_MS) return;
 
-        // doar request-uri care par legate de bid
         let bodyText = "";
+
         if (typeof body === "string") {
             bodyText = body;
         } else if (body instanceof FormData) {
@@ -307,39 +284,27 @@
             bodyText = arr.join("&");
         }
 
-        const hasKeywordInUrl  = textContainsKeyword(url);
-        const hasKeywordInBody = textContainsKeyword(bodyText);
-
-        if (!hasKeywordInUrl && !hasKeywordInBody) {
-            return;
-        }
-
-        console.log("[LOGGER] Request detectat (", tag, "):", url);
-
         let amount = null;
 
-        if (bodyText && bodyText.trim().startsWith("{")) {
-            try {
-                const json = JSON.parse(bodyText);
-                amount = extractNumberEU(JSON.stringify(json));
-            } catch { /* ignore */ }
+        if (bodyText) {
+            if (bodyText.trim().startsWith("{")) {
+                try {
+                    const json = JSON.parse(bodyText);
+                    amount = extractNumberEU(JSON.stringify(json));
+                } catch { /* ignore */ }
+            }
+            if (!amount) amount = extractNumberEU(bodyText);
         }
 
-        if (!amount && bodyText) {
-            amount = extractNumberEU(bodyText);
-        }
+        if (!amount) amount = lastClickInfo.domAmount;
+        if (!amount) return;
 
-        if (!amount) {
-            amount = lastClickInfo.domAmount;
-        }
-
-        if (!amount) {
-            console.log("[LOGGER] Nu am putut determina amount, ies.");
-            return;
-        }
+        console.log("[LOGGER] Request detectat dupa click:", { url, tag, amount });
 
         const payload = buildPayload(amount, req-${tag}, lastClickInfo.btn);
         sendToServer(payload);
+
+        lastClickInfo.sent = true;
     }
 
 })();
