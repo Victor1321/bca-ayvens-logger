@@ -103,7 +103,7 @@
             }
         }
 
-        // BCA (functioneaza pe ambele domenii)
+        // BCA
         const bca = document.querySelector("h2.viewlot_headline.viewlot_headline--large");
         if (bca && bca.innerText.trim()) return bca.innerText.trim();
 
@@ -118,13 +118,11 @@
     function extractImageUrl() {
         const host = location.hostname;
 
-        // Ayvens: imaginea principală a mașinii
+        // Ayvens: imagine principală
         if (host.includes("ayvens")) {
-            // 1) direct pe <img id="vehicle-default-picture-...">
             let img = document.querySelector("img[id^='vehicle-default-picture']");
             if (img && img.src) return img.src;
 
-            // 2) fallback: orice <div class="vehicle-picture"> img
             img = document.querySelector(".vehicle-picture img");
             if (img && img.src) return img.src;
         }
@@ -148,7 +146,7 @@
     }
 
     // --------------------------
-    // Dedup (FIX: fara timestamp in semnatura)
+    // Dedup – folosim o semnătură pe secundă
     // --------------------------
     function shouldSend(sig) {
         const t = now();
@@ -181,15 +179,18 @@
     // Send to server
     // --------------------------
     function sendToServer(data) {
-        // semnatura fara timestamp → dedupeaza toate duplicatele in 3s
-        const sig = JSON.stringify({
+        // semnătură pentru DEDUP: același bid în același secund => o singură notificare
+        const dedupSig = JSON.stringify({
             client_id: data.client_id,
             item_link: data.item_link,
             bid_amount: data.bid_amount,
-            host: location.hostname
+            host: location.hostname,
+            second: Math.floor(Date.now() / 1000)
         });
 
-        if (!shouldSend(sig)) return;
+        if (!shouldSend(dedupSig)) return;
+
+        console.log("[LOGGER] Trimit către server:", data);
 
         fetch(SERVER_URL, {
             method: "POST",
