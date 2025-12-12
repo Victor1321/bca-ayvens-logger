@@ -6,10 +6,20 @@
 (function () {
     "use strict";
 
+    // =========================================================
+    // PROTECTIE: NU RULAM DE DOUA ORI IN ACEEASI PAGINA
+    // =========================================================
+    if (window._BCA_AYVENS_LOGGER_LOADED_) {
+        console.log("[LOGGER] Script deja încărcat, ies.");
+        return;
+    }
+    window._BCA_AYVENS_LOGGER_LOADED_ = true;
+    console.log("[LOGGER] Pornesc Universal Auction Logger...");
+
     // --------------------------
     // CONFIG
     // --------------------------
-    const SERVER_URL = "https://bca-ayvens.up.railway.app/receive-bid";
+    const SERVER_URL = "https://bca-ayvens.up.railway.app/logger-script-marian.js";
     const CLIENT_ID = "Marian";
 
     const BID_KEYWORDS = ["bid", "licit", "offer", "oferta", "place", "submit"];
@@ -94,7 +104,7 @@
         }
 
         // BCA (functioneaza pe ambele domenii)
-        const bca = document.querySelector("h2.viewlot__headline.viewlot__headline--large");
+        const bca = document.querySelector("h2.viewlot_headline.viewlot_headline--large");
         if (bca && bca.innerText.trim()) return bca.innerText.trim();
 
         // fallback
@@ -103,28 +113,19 @@
     }
 
     // --------------------------
-    // Imagine – BCA + Ayvens
+    // Imagine – BCA + AYVENS
     // --------------------------
-    function extractImageUrl(btn) {
+    function extractImageUrl() {
         const host = location.hostname;
 
-        // Ayvens – luam poza din cardul vehiculului
-        if (host.includes("carmarket.ayvens.com")) {
-            let img = null;
+        // Ayvens: imaginea principală a mașinii
+        if (host.includes("ayvens")) {
+            // 1) direct pe <img id="vehicle-default-picture-...">
+            let img = document.querySelector("img[id^='vehicle-default-picture']");
+            if (img && img.src) return img.src;
 
-            // 1) încearcă mai întâi în cardul butonului
-            if (btn) {
-                const card = btn.closest(".vehicle-card, .vehicle, .search-result, .row, article, section, div");
-                if (card) {
-                    img = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture']");
-                }
-            }
-
-            // 2) fallback global
-            if (!img) {
-                img = document.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture']");
-            }
-
+            // 2) fallback: orice <div class="vehicle-picture"> img
+            img = document.querySelector(".vehicle-picture img");
             if (img && img.src) return img.src;
         }
 
@@ -147,11 +148,14 @@
     }
 
     // --------------------------
-    // Dedup
+    // Dedup (FIX: fara timestamp in semnatura)
     // --------------------------
     function shouldSend(sig) {
         const t = now();
-        if (lastSentSignature === sig && t - lastSentTime < DEDUP_WINDOW_MS) return false;
+        if (lastSentSignature === sig && t - lastSentTime < DEDUP_WINDOW_MS) {
+            console.log("[LOGGER] Duplicat detectat, nu trimit din nou:", sig);
+            return false;
+        }
         lastSentSignature = sig;
         lastSentTime = t;
         return true;
@@ -169,7 +173,7 @@
             currency: "EUR",
             timestamp: timestamp(),
             source: sourceTag,
-            image_url: extractImageUrl(btn)
+            image_url: extractImageUrl()
         };
     }
 
@@ -177,11 +181,12 @@
     // Send to server
     // --------------------------
     function sendToServer(data) {
+        // semnatura fara timestamp → dedupeaza toate duplicatele in 3s
         const sig = JSON.stringify({
             client_id: data.client_id,
             item_link: data.item_link,
             bid_amount: data.bid_amount,
-            timestamp: data.timestamp
+            host: location.hostname
         });
 
         if (!shouldSend(sig)) return;
@@ -194,9 +199,14 @@
     }
 
     // =========================================================
-    // START – Script activ doar pe hosturile permise
+    // START – Script activ doar pe host-urile permise
     // =========================================================
-    if (!isAllowed()) return;
+    if (!isAllowed()) {
+        console.log("[LOGGER] Host nepermis, ies:", location.hostname);
+        return;
+    }
+
+    console.log("[LOGGER] Activ pe host:", location.hostname);
 
     // --------------------------
     // CLICK detector
@@ -213,8 +223,11 @@
         lastClickInfo = {
             time: now(),
             domAmount: amount || null,
-            btn
+            btn,
+            sent: false
         };
+
+        console.log("[LOGGER] Click detectat pe buton cu text:", txt, "suma detectata:", amount);
 
         // fallback dacă nu apare request
         setTimeout(() => {
@@ -222,6 +235,7 @@
             const age = now() - lastClickInfo.time;
             if (age > CLICK_WINDOW_MS && !lastClickInfo.sent && lastClickInfo.domAmount) {
                 const payload = buildPayload(lastClickInfo.domAmount, "dom-fallback", lastClickInfo.btn);
+                console.log("[LOGGER] Fallback DOM, trimit payload:", payload);
                 sendToServer(payload);
                 lastClickInfo.sent = true;
             }
@@ -238,7 +252,9 @@
                 const url = typeof input === "string" ? input : input.url;
                 const body = init?.body || null;
                 handleRequest(url, body, "fetch");
-            } catch (err) { }
+            } catch (err) {
+                // silent
+            }
             return orig.apply(this, arguments);
         };
     })();
@@ -276,7 +292,7 @@
         if (typeof body === "string") bodyText = body;
         else if (body instanceof FormData) {
             const arr = [];
-            body.forEach((v, k) => arr.push(`${k}=${v}`));
+            body.forEach((v, k) => arr.push(${k}=${v}));
             bodyText = arr.join("&");
         }
 
@@ -294,7 +310,8 @@
 
         if (!amount) return;
 
-        const payload = buildPayload(amount, `req-${tag}`, lastClickInfo.btn);
+        const payload = buildPayload(amount, req-${tag}, lastClickInfo.btn);
+        console.log("[LOGGER] Request detectat, trimit payload:", payload);
         sendToServer(payload);
 
         lastClickInfo.sent = true;
