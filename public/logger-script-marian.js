@@ -6,41 +6,35 @@
 (function () {
     "use strict";
 
-    // =========================================================
-    // PROTECTIE: NU RULAM DE DOUA ORI IN ACEEASI PAGINA
-    // =========================================================
-    if (window._BCA_AYVENS_LOGGER_LOADED_) {
-        console.log("[LOGGER] Script deja încărcat, ies.");
-        return;
-    }
-    window._BCA_AYVENS_LOGGER_LOADED_ = true;
-    console.log("[LOGGER] Pornesc Universal Auction Logger...");
-
     // --------------------------
     // CONFIG
     // --------------------------
     const SERVER_URL = "https://bca-ayvens.up.railway.app/logger-script-marian.js";
     const CLIENT_ID = "Marian";
 
-    const BID_KEYWORDS = ["bid", "licit", "offer", "oferta", "place", "submit"];
+    const BID_KEYWORDS = ["bid", "licit", "offer", "oferta", "place", "submit", "bid now", "place bid"];
+
     const ALLOWED_HOSTS = [
         "ee.bca-europe.com",
         "idp.bca-online-auctions.eu",
+        "www.bca.com",
+        "bca.com",
         "carmarket.ayvens.com"
     ];
 
+    // cât timp asociem request-urile cu un click (ms)
     const CLICK_WINDOW_MS = 5000;
-    const DEDUP_WINDOW_MS = 3000;
 
-    let lastClickInfo = null;
-    let lastSentSignature = null;
-    let lastSentTime = 0;
+    let lastClickInfo = null; // { time, domAmount, btn, sent }
 
     // --------------------------
     // Helpers
     // --------------------------
     function now() { return Date.now(); }
-    function isAllowed() { return ALLOWED_HOSTS.includes(location.hostname); }
+
+    function isAllowed() {
+        return ALLOWED_HOSTS.includes(location.hostname);
+    }
 
     function textContainsKeyword(text) {
         if (!text) return false;
@@ -48,19 +42,21 @@
         return BID_KEYWORDS.some(k => lower.includes(k));
     }
 
+    // parsează număr în format european
     function extractNumberEU(text) {
         if (!text) return null;
         text = text.replace(/[^0-9.,]/g, "");
         if (!text) return null;
         const std = text.replace(/\./g, "").replace(",", ".");
         const nr = parseFloat(std);
+        // protecție: sume rezonabile de licitație
         return isNaN(nr) || nr < 100 || nr > 500000 ? null : nr;
     }
 
     function findValueInInputs() {
         const inputs = document.querySelectorAll("input[type='text'], input[type='number']");
         for (const inp of inputs) {
-            if (!inp.offsetParent) continue;
+            if (!inp.offsetParent) continue; // ascunse
             const nr = extractNumberEU(inp.value);
             if (nr) return nr;
         }
@@ -88,14 +84,21 @@
     function extractItemTitle(btn) {
         const host = location.hostname;
 
-        // Ayvens - combina titlu principal + sublinie
-        if (host.includes("ayvens")) {
-            const card = btn?.closest("article, .vehicle, .listing-item, .offer-item, .card");
-            if (card) {
-                const h2 = card.querySelector("h2.vehicle-title");
-                const make = card.querySelector("p.vehicle-make");
+        // Ayvens – încearcă să ia titlul mașinii din card / pagină
+        if (host.includes("carmarket.ayvens.com")) {
+            // 1) pe pagina de detaliu (vânzare) – titlul mare
+            const saleTitle = document.querySelector("h1.vehicle-title, h1.vehicle-title-main");
+            if (saleTitle && saleTitle.innerText.trim()) {
+                return saleTitle.innerText.trim();
+            }
 
-                const t1 = h2 ? (h2.childNodes[2]?.textContent?.trim() || "") : "";
+            // 2) card în listă / watchlist (similar cu ce aveai)
+            const card = btn?.closest("article, .vehicle, .listing-item, .offer-item, .card, .vehicle-card");
+            if (card) {
+                const h2 = card.querySelector("h2.vehicle-title, h2");
+                const make = card.querySelector("p.vehicle-make, .vehicle-subtitle");
+
+                const t1 = h2 ? (h2.innerText || "").trim() : "";
                 const t2 = make ? make.textContent.trim() : "";
 
                 const full = [t1, t2].filter(Boolean).join(" ");
@@ -103,60 +106,50 @@
             }
         }
 
-        // BCA
+        // BCA (funcționează pe view lot)
         const bca = document.querySelector("h2.viewlot_headline.viewlot_headline--large");
         if (bca && bca.innerText.trim()) return bca.innerText.trim();
 
-        // fallback
+        // fallback generic
         const h = document.querySelector("h1, h2");
         return h?.innerText?.trim() || "Titlu indisponibil";
     }
 
     // --------------------------
-    // Imagine – BCA + AYVENS
+    // Imagine – BCA + Ayvens
     // --------------------------
     function extractImageUrl() {
         const host = location.hostname;
 
-        // Ayvens: imagine principală
-        if (host.includes("ayvens")) {
-            let img = document.querySelector("img[id^='vehicle-default-picture']");
+        // BCA – imagini principale
+        if (host.includes("bca")) {
+            let img = document.querySelector(".viewlot__img img.MainImg");
             if (img && img.src) return img.src;
 
-            img = document.querySelector(".vehicle-picture img");
+            img = document.querySelector(".ImageA img");
             if (img && img.src) return img.src;
         }
 
-        // BCA
-        let img = document.querySelector(".viewlot__img img.MainImg");
-        if (img && img.src) return img.src;
+        // Ayvens – imaginea default a mașinii (exemplul cu vehicle-default-picture-...)
+        if (host.includes("carmarket.ayvens.com")) {
+            // 1) pe pagina de detaliu: imaginea cu id "vehicle-default-picture-..."
+            let img = document.querySelector("img[id^='vehicle-default-picture-']");
+            if (img && img.src) return img.src;
 
-        img = document.querySelector(".ImageA img");
-        if (img && img.src) return img.src;
+            // 2) în listă / card: imagine în .vehicle-picture
+            img = document.querySelector(".vehicle-picture picture img, .vehicle-picture img");
+            if (img && img.src) return img.src;
+        }
 
         return null;
     }
 
     // --------------------------
-    // Timestamp local GMT+2
+    // Timestamp local GMT+2 (ca înainte)
     // --------------------------
     function timestamp() {
         const d = new Date(Date.now() + 2 * 3600000);
         return d.toISOString().replace("T", " ").replace("Z", "");
-    }
-
-    // --------------------------
-    // Dedup – folosim o semnătură pe secundă
-    // --------------------------
-    function shouldSend(sig) {
-        const t = now();
-        if (lastSentSignature === sig && t - lastSentTime < DEDUP_WINDOW_MS) {
-            console.log("[LOGGER] Duplicat detectat, nu trimit din nou:", sig);
-            return false;
-        }
-        lastSentSignature = sig;
-        lastSentTime = t;
-        return true;
     }
 
     // --------------------------
@@ -176,21 +169,10 @@
     }
 
     // --------------------------
-    // Send to server
+    // Send to server – FĂRĂ DEDUP GLOBAL
     // --------------------------
     function sendToServer(data) {
-        // semnătură pentru DEDUP: același bid în același secund => o singură notificare
-        const dedupSig = JSON.stringify({
-            client_id: data.client_id,
-            item_link: data.item_link,
-            bid_amount: data.bid_amount,
-            host: location.hostname,
-            second: Math.floor(Date.now() / 1000)
-        });
-
-        if (!shouldSend(dedupSig)) return;
-
-        console.log("[LOGGER] Trimit către server:", data);
+        console.log("[LOGGER] Trimit payload la server:", data);
 
         fetch(SERVER_URL, {
             method: "POST",
@@ -200,26 +182,31 @@
     }
 
     // =========================================================
-    // START – Script activ doar pe host-urile permise
+    // START – Script activ doar pe host-uri permise
     // =========================================================
+    console.log("[LOGGER] script încărcat pe host:", location.hostname);
     if (!isAllowed()) {
-        console.log("[LOGGER] Host nepermis, ies:", location.hostname);
+        console.log("[LOGGER] host nepermis, nu pornesc logger.");
         return;
     }
-
-    console.log("[LOGGER] Activ pe host:", location.hostname);
+    console.log("[LOGGER] activ pe host permis:", location.hostname);
 
     // --------------------------
-    // CLICK detector
+    // CLICK detector – 1 click = 1 licitație logică
     // --------------------------
     document.addEventListener("click", e => {
         const btn = e.target.closest("button, a, input[type='submit']");
         if (!btn) return;
 
         const txt = (btn.innerText || btn.value || "").trim();
+        console.log("[LOGGER] click detectat pe buton:", txt);
+
         if (!textContainsKeyword(txt)) return;
 
-        const amount = findValueInInputs() || findNumberInText(btn) || scanNearbyForNumber(btn);
+        const amount =
+            findValueInInputs() ||
+            findNumberInText(btn) ||
+            scanNearbyForNumber(btn);
 
         lastClickInfo = {
             time: now(),
@@ -228,23 +215,22 @@
             sent: false
         };
 
-        console.log("[LOGGER] Click detectat pe buton cu text:", txt, "suma detectata:", amount);
-
-        // fallback dacă nu apare request
+        // fallback dacă nu apare niciun request de licitație
         setTimeout(() => {
             if (!lastClickInfo) return;
             const age = now() - lastClickInfo.time;
-            if (age > CLICK_WINDOW_MS && !lastClickInfo.sent && lastClickInfo.domAmount) {
-                const payload = buildPayload(lastClickInfo.domAmount, "dom-fallback", lastClickInfo.btn);
-                console.log("[LOGGER] Fallback DOM, trimit payload:", payload);
-                sendToServer(payload);
-                lastClickInfo.sent = true;
-            }
+            if (age > CLICK_WINDOW_MS) return;
+            if (lastClickInfo.sent) return;
+            if (!lastClickInfo.domAmount) return;
+
+            const payload = buildPayload(lastClickInfo.domAmount, "dom-fallback", lastClickInfo.btn);
+            lastClickInfo.sent = true;
+            sendToServer(payload);
         }, CLICK_WINDOW_MS + 200);
     });
 
     // --------------------------
-    // Request Interceptor – FETCH
+    // Interceptor FETCH
     // --------------------------
     (function () {
         const orig = window.fetch;
@@ -253,15 +239,13 @@
                 const url = typeof input === "string" ? input : input.url;
                 const body = init?.body || null;
                 handleRequest(url, body, "fetch");
-            } catch (err) {
-                // silent
-            }
+            } catch (err) { /* ignore */ }
             return orig.apply(this, arguments);
         };
     })();
 
     // --------------------------
-    // Request Interceptor – XHR
+    // Interceptor XHR
     // --------------------------
     (function () {
         const O = XMLHttpRequest.prototype.open;
@@ -279,19 +263,25 @@
     })();
 
     // --------------------------
-    // Request Handler
+    // Request Handler — AICI facem „1 click = 1 mesaj”
     // --------------------------
     function handleRequest(url, body, tag) {
         if (!lastClickInfo) return;
-        if (now() - lastClickInfo.time > CLICK_WINDOW_MS) return;
+        const age = now() - lastClickInfo.time;
+        if (age > CLICK_WINDOW_MS) return;
 
+        // dacă deja am trimis pentru acest click, nu mai trimitem
+        if (lastClickInfo.sent) return;
+
+        // filtrăm doar request-urile „suspecte” (care pot fi de licitație)
         if (!textContainsKeyword(url)) {
             if (typeof body === "string" && !textContainsKeyword(body)) return;
         }
 
         let bodyText = "";
-        if (typeof body === "string") bodyText = body;
-        else if (body instanceof FormData) {
+        if (typeof body === "string") {
+            bodyText = body;
+        } else if (body instanceof FormData) {
             const arr = [];
             body.forEach((v, k) => arr.push(${k}=${v}));
             bodyText = arr.join("&");
@@ -299,23 +289,37 @@
 
         let amount = null;
 
-        if (bodyText.startsWith("{")) {
+        // JSON body
+        if (bodyText && bodyText.trim().startsWith("{")) {
             try {
                 const json = JSON.parse(bodyText);
                 amount = extractNumberEU(JSON.stringify(json));
-            } catch { }
+            } catch (e) {
+                // ignore parse error
+            }
         }
 
-        if (!amount && bodyText) amount = extractNumberEU(bodyText);
-        if (!amount) amount = lastClickInfo.domAmount;
+        // fallback: orice număr din body
+        if (!amount && bodyText) {
+            amount = extractNumberEU(bodyText);
+        }
 
-        if (!amount) return;
+        // fallback final: ce am găsit în DOM la click
+        if (!amount) {
+            amount = lastClickInfo.domAmount;
+        }
+
+        if (!amount) {
+            console.log("[LOGGER] handleRequest: nu am găsit sumă, nu trimit.");
+            return;
+        }
 
         const payload = buildPayload(amount, req-${tag}, lastClickInfo.btn);
-        console.log("[LOGGER] Request detectat, trimit payload:", payload);
-        sendToServer(payload);
 
+        // MARCHEZ că pentru acest click am trimis deja
         lastClickInfo.sent = true;
+
+        sendToServer(payload);
     }
 
 })();
