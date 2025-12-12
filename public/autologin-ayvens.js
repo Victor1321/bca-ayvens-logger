@@ -111,33 +111,31 @@
     }
 
     // ---------------------------------------------------------
-    // Închide pop-up-ul de feedback (content > .cross)
+    // Închide popin-ul de feedback (ABTasty NPS)
     // ---------------------------------------------------------
-    function startFeedbackPopupCloser() {
-        console.log("[AUTOLOGIN-AYVENS] Pornez vânător de popup feedback...");
+    function closeAyvensFeedbackPopin() {
+        let attempts = 0;
+        const maxAttempts = 40; // ~20 sec (40 * 500ms)
 
-        let tries = 0;
-        const maxTries = 30; // ~30 secunde dacă rulează la 1s
+        const timer = setInterval(() => {
+            attempts++;
 
-        const intId = setInterval(() => {
-            tries++;
-
-            const cross =
-                document.querySelector(".content .cross") ||
-                document.querySelector("div.cross");
-
-            if (cross) {
-                console.log("[AUTOLOGIN-AYVENS] Găsit popin feedback, dau click pe ✕");
-                cross.click();
-                clearInterval(intId);
-                return;
+            const container = document.getElementById("ABTasty1228544");
+            if (container) {
+                const underlay = container.querySelector(".underlay");
+                if (underlay) {
+                    console.log("[AUTOLOGIN-AYVENS] Popin NPS găsit, dau click pe underlay.");
+                    underlay.click();
+                    clearInterval(timer);
+                    return;
+                }
             }
 
-            if (tries >= maxTries) {
-                console.log("[AUTOLOGIN-AYVENS] Nu am găsit popin feedback după", maxTries, "încercări.");
-                clearInterval(intId);
+            if (attempts >= maxAttempts) {
+                console.log("[AUTOLOGIN-AYVENS] Nu am găsit popinul NPS (timeout).");
+                clearInterval(timer);
             }
-        }, 1000);
+        }, 500);
     }
 
     // ---------------------------------------------------------
@@ -240,10 +238,10 @@
             submitBtn.click();
             console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare (#btn_login), aștept rezultat...");
 
-            // Pornește vânătorul de popin feedback (după login)
-            setTimeout(startFeedbackPopupCloser, 3000);
+            // încearcă să închidă popin-ul de feedback după login
+            closeAyvensFeedbackPopin();
 
-            // Lăsăm un mic delay apoi ascundem overlay-ul nostru
+            // după puțin timp ascundem overlay-ul (în mod normal deja e redirect/logged-in)
             setTimeout(() => {
                 hideAyvensOverlay();
             }, 5000);
