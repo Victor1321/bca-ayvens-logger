@@ -111,6 +111,20 @@
     }
 
     // ---------------------------------------------------------
+    // Închide popin-ul de feedback (după login)
+    // ---------------------------------------------------------
+    async function closeAyvensFeedbackPopup() {
+        try {
+            // .content .cross este X-ul din popin
+            const cross = await waitFor(".content .cross, .cross", 8000);
+            cross.click();
+            console.log("[AUTOLOGIN-AYVENS] Am închis popin-ul de feedback.");
+        } catch (e) {
+            console.log("[AUTOLOGIN-AYVENS] Popin de feedback nu a apărut sau nu am găsit .cross.");
+        }
+    }
+
+    // ---------------------------------------------------------
     // Bridge: cere credențialele de la extensie
     // ---------------------------------------------------------
     function getCredentials() {
@@ -210,6 +224,10 @@
             submitBtn.click();
             console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare (#btn_login), aștept rezultat...");
 
+            // după login încercăm să închidem popin-ul de feedback
+            setTimeout(closeAyvensFeedbackPopup, 5000);
+
+            // și apoi ascundem overlay-ul nostru
             setTimeout(() => {
                 hideAyvensOverlay();
             }, 5000);
