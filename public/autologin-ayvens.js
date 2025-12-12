@@ -110,7 +110,7 @@
         }
     }
 
-    // ---------------------------------------------------------
+/*     // ---------------------------------------------------------
 // Închide popin-ul de feedback (ABTasty NPS)
 // ---------------------------------------------------------
 function closeAyvensFeedbackPopin() {
@@ -141,7 +141,7 @@ function closeAyvensFeedbackPopin() {
             clearInterval(timer);
         }
     }, 500);
-}
+} */
 
     // ---------------------------------------------------------
     // Bridge: cere credențialele de la extensie
