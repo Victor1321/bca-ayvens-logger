@@ -131,9 +131,22 @@
   // --------------------------
   function extractItemTitle(btn) {
     try {
-      const host = location.hostname;
+      const host = location.hostname.toLowerCase();
 
-      // --- Ayvens ---
+      // helper: unele texte NU sunt titluri valide
+      function isBadTitle(t) {
+        if (!t) return true;
+        const s = t.trim().toLowerCase();
+        const bad = [
+          "solicitați informații",
+          "solicitati informatii",
+          "request info",
+          "request information",
+        ];
+        return bad.includes(s);
+      }
+
+      // 1) AYVENS – lași logica ta existentă
       if (host.includes("ayvens")) {
         const card = btn
           ? btn.closest("article, .vehicle, .listing-item, .offer-item, .card")
@@ -157,47 +170,36 @@
           if (full) return full;
         }
 
-        // fallback pe pagina de detaliu
         const hAy = document.querySelector("h1, h2");
         if (hAy && hAy.textContent.trim()) return hAy.textContent.trim();
       }
 
-      // --- BCA (ee.bca-europe.com, idp.bca-online-auctions.eu) ---
-      if (
-        host.includes("bca-europe.com") ||
-        host.includes("bca-online-auctions.eu") ||
-        host.endsWith("bca.com")
-      ) {
-        // 1) Intai cautam un card in jurul butonului (lista de masini)
-        if (btn) {
-          const card = btn.closest(
-            ".viewlot, .lot, .auction-tile, .VehicleListItem, article, section, div"
-          );
-          if (card) {
-            const hCard = card.querySelector(
-              "h2.viewlot_headline.viewlot_headline--large, " +
-                "h2.viewlot__headline, h2, h3, a"
-            );
-            if (hCard && hCard.textContent.trim()) {
-              return hCard.textContent.trim();
-            }
-          }
-        }
-
-        // 2) Pagina de detaliu lot: heading-ul principal
-        const hLot = document.querySelector(
-          "h2.viewlot_headline.viewlot_headline--large, " +
-            "h1.viewlot_headline.viewlot_headline--large, " +
-            "h2.viewlot_headline, h1.viewlot_headline"
-        );
-        if (hLot && hLot.textContent.trim()) {
-          return hLot.textContent.trim();
-        }
+      // 2) BCA – ÎNTÂI titlul global de lot (h2.viewlot__headline...)
+      const bcaTitle = document.querySelector(
+        "h2.viewlot_headline.viewlotheadline--large, h1.viewlotheadline.viewlot_headline--large"
+      );
+      if (bcaTitle) {
+        const txt = (bcaTitle.textContent || "").trim();
+        if (txt && !isBadTitle(txt)) return txt;
       }
 
-      // --- fallback global ---
-      const h = document.querySelector("h1, h2");
-      return (h && h.innerText.trim()) || "Titlu indisponibil";
+      // 3) Fallback BCA: orice alt h2.viewlot__headline
+      const bcaAlt = document.querySelector(
+        "h2.viewlot_headline, h1.viewlot_headline"
+      );
+      if (bcaAlt) {
+        const txt = (bcaAlt.textContent || "").trim();
+        if (txt && !isBadTitle(txt)) return txt;
+      }
+
+      // 4) Fallback global – dar să nu fie textele alea gen „Solicitați informații”
+      const h = document.querySelector("h1, h2, h3");
+      if (h) {
+        const txt = (h.textContent || "").trim();
+        if (txt && !isBadTitle(txt)) return txt;
+      }
+
+      return "Titlu indisponibil";
     } catch (e) {
       log("Eroare extractItemTitle:", e);
       return "Titlu indisponibil";
