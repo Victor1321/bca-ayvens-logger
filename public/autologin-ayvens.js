@@ -111,32 +111,37 @@
     }
 
     // ---------------------------------------------------------
-    // Închide popin-ul de feedback (ABTasty NPS)
-    // ---------------------------------------------------------
-    function closeAyvensFeedbackPopin() {
-        let attempts = 0;
-        const maxAttempts = 40; // ~20 sec (40 * 500ms)
+// Închide popin-ul de feedback (ABTasty NPS)
+// ---------------------------------------------------------
+function closeAyvensFeedbackPopin() {
+    let attempts = 0;
+    const maxAttempts = 40; // ~20 sec (40 * 500ms)
 
-        const timer = setInterval(() => {
-            attempts++;
+    const timer = setInterval(() => {
+        attempts++;
 
-            const container = document.getElementById("ABTasty1228544");
-            if (container) {
-                const underlay = container.querySelector(".underlay");
-                if (underlay) {
-                    console.log("[AUTOLOGIN-AYVENS] Popin NPS găsit, dau click pe underlay.");
-                    underlay.click();
-                    clearInterval(timer);
-                    return;
-                }
-            }
+        const container = document.getElementById("ABTasty1228544");
+        if (container) {
+            // zona din spate (în afara .content)
+            const underlay = container.querySelector(".underlay");
+            // butonul X (fallback)
+            const cross = container.querySelector(".content .cross");
 
-            if (attempts >= maxAttempts) {
-                console.log("[AUTOLOGIN-AYVENS] Nu am găsit popinul NPS (timeout).");
-                clearInterval(timer);
-            }
-        }, 500);
-    }
+            const target = underlay || cross || container;
+
+            console.log("[AUTOLOGIN-AYVENS] Popin NPS găsit, dau click pe overlay.");
+            target.click();
+
+            clearInterval(timer);
+            return;
+        }
+
+        if (attempts >= maxAttempts) {
+            console.log("[AUTOLOGIN-AYVENS] Nu am găsit popinul NPS (timeout).");
+            clearInterval(timer);
+        }
+    }, 500);
+}
 
     // ---------------------------------------------------------
     // Bridge: cere credențialele de la extensie
