@@ -111,17 +111,33 @@
     }
 
     // ---------------------------------------------------------
-    // Închide popin-ul de feedback (după login)
+    // Închide pop-up-ul de feedback (content > .cross)
     // ---------------------------------------------------------
-    async function closeAyvensFeedbackPopup() {
-        try {
-            // .content .cross este X-ul din popin
-            const cross = await waitFor(".content .cross, .cross", 8000);
-            cross.click();
-            console.log("[AUTOLOGIN-AYVENS] Am închis popin-ul de feedback.");
-        } catch (e) {
-            console.log("[AUTOLOGIN-AYVENS] Popin de feedback nu a apărut sau nu am găsit .cross.");
-        }
+    function startFeedbackPopupCloser() {
+        console.log("[AUTOLOGIN-AYVENS] Pornez vânător de popup feedback...");
+
+        let tries = 0;
+        const maxTries = 30; // ~30 secunde dacă rulează la 1s
+
+        const intId = setInterval(() => {
+            tries++;
+
+            const cross =
+                document.querySelector(".content .cross") ||
+                document.querySelector("div.cross");
+
+            if (cross) {
+                console.log("[AUTOLOGIN-AYVENS] Găsit popin feedback, dau click pe ✕");
+                cross.click();
+                clearInterval(intId);
+                return;
+            }
+
+            if (tries >= maxTries) {
+                console.log("[AUTOLOGIN-AYVENS] Nu am găsit popin feedback după", maxTries, "încercări.");
+                clearInterval(intId);
+            }
+        }, 1000);
     }
 
     // ---------------------------------------------------------
@@ -224,10 +240,10 @@
             submitBtn.click();
             console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare (#btn_login), aștept rezultat...");
 
-            // după login încercăm să închidem popin-ul de feedback
-            setTimeout(closeAyvensFeedbackPopup, 5000);
+            // Pornește vânătorul de popin feedback (după login)
+            setTimeout(startFeedbackPopupCloser, 3000);
 
-            // și apoi ascundem overlay-ul nostru
+            // Lăsăm un mic delay apoi ascundem overlay-ul nostru
             setTimeout(() => {
                 hideAyvensOverlay();
             }, 5000);
