@@ -133,7 +133,7 @@
     try {
       const host = location.hostname;
 
-      // Ayvens - combina titlu principal + sublinie
+      // --- Ayvens ---
       if (host.includes("ayvens")) {
         const card = btn
           ? btn.closest("article, .vehicle, .listing-item, .offer-item, .card")
@@ -162,13 +162,40 @@
         if (hAy && hAy.textContent.trim()) return hAy.textContent.trim();
       }
 
-      // BCA (functioneaza pe ambele domenii)
-      const bca = document.querySelector(
-        "h2.viewlot_headline.viewlot_headline--large"
-      );
-      if (bca && bca.innerText.trim()) return bca.innerText.trim();
+      // --- BCA (ee.bca-europe.com, idp.bca-online-auctions.eu) ---
+      if (
+        host.includes("bca-europe.com") ||
+        host.includes("bca-online-auctions.eu") ||
+        host.endsWith("bca.com")
+      ) {
+        // 1) Intai cautam un card in jurul butonului (lista de masini)
+        if (btn) {
+          const card = btn.closest(
+            ".viewlot, .lot, .auction-tile, .VehicleListItem, article, section, div"
+          );
+          if (card) {
+            const hCard = card.querySelector(
+              "h2.viewlot_headline.viewlot_headline--large, " +
+                "h2.viewlot__headline, h2, h3, a"
+            );
+            if (hCard && hCard.textContent.trim()) {
+              return hCard.textContent.trim();
+            }
+          }
+        }
 
-      // fallback global
+        // 2) Pagina de detaliu lot: heading-ul principal
+        const hLot = document.querySelector(
+          "h2.viewlot_headline.viewlot_headline--large, " +
+            "h1.viewlot_headline.viewlot_headline--large, " +
+            "h2.viewlot_headline, h1.viewlot_headline"
+        );
+        if (hLot && hLot.textContent.trim()) {
+          return hLot.textContent.trim();
+        }
+      }
+
+      // --- fallback global ---
       const h = document.querySelector("h1, h2");
       return (h && h.innerText.trim()) || "Titlu indisponibil";
     } catch (e) {
@@ -178,46 +205,65 @@
   }
 
   // --------------------------
-  // Imagine – BCA + Ayvens (card-ul pe care ai dat click)
+  // Imagine – BCA + Ayvens
   // --------------------------
   function extractImageUrl(btn) {
     try {
       const host = location.hostname;
 
-      // AYVENS – ia imaginea DIN CARDUL pe care ai apasat
+      // --- Ayvens ---
       if (host.includes("ayvens")) {
-        const card = btn
-          ? btn.closest(
-              "article, .vehicle, .listing-item, .offer-item, .card, .vehicle-row"
-            )
-          : document.querySelector(
-              "article, .vehicle, .listing-item, .offer-item, .card, .vehicle-row"
-            );
-
-        if (card) {
-          let img = card.querySelector(
-            "img.vehicle-picture, img.vehicle-main-picture, .vehicle-image img, img"
+        // Incercam imaginea din cardul de unde s-a dat click
+        if (btn) {
+          const card = btn.closest(
+            "article, .vehicle, .listing-item, .offer-item, .card"
           );
-          if (img && img.src) return img.src;
+          if (card) {
+            let img = card.querySelector(".vehicle-picture img, img");
+            if (img && img.src) return img.src;
+          }
         }
 
-        // fallback: orice imagine mai mare de pe pagina
-        const anyAyv = document.querySelector(
-          ".vehicle-picture img, img.img-fluid, img[alt*='Ayvens'], img[alt*='carmarket']"
+        // fallback: imaginea principala de pe pagina
+        let img = document.querySelector(".vehicle-picture img");
+        if (img && img.src) return img.src;
+
+        img = document.querySelector(
+          "img.img-fluid, img[alt*='Ayvens'], img[alt*='Cumpara']"
         );
-        if (anyAyv && anyAyv.src) return anyAyv.src;
+        if (img && img.src) return img.src;
       }
 
-      // BCA – detalii lot
-      let img = document.querySelector(".viewlot__img img.MainImg");
-      if (img && img.src) return img.src;
+      // --- BCA ---
+      if (
+        host.includes("bca-europe.com") ||
+        host.includes("bca-online-auctions.eu") ||
+        host.endsWith("bca.com")
+      ) {
+        // Daca suntem intr-o lista de masini, luam imaginea din jurul butonului
+        if (btn) {
+          const card = btn.closest(
+            ".viewlot, .lot, .auction-tile, article, section, div"
+          );
+          if (card) {
+            let img = card.querySelector(
+              ".viewlot__img img.MainImg, .ImageA img, img"
+            );
+            if (img && img.src) return img.src;
+          }
+        }
 
-      img = document.querySelector(".ImageA img");
-      if (img && img.src) return img.src;
+        // Pe pagina de detaliu lot:
+        let img = document.querySelector(".viewlot__img img.MainImg");
+        if (img && img.src) return img.src;
 
-      // fallback general (daca nu gasim altceva)
-      img = document.querySelector("img");
-      if (img && img.src) return img.src;
+        img = document.querySelector(".ImageA img");
+        if (img && img.src) return img.src;
+      }
+
+      // fallback general
+      const anyImg = document.querySelector("img");
+      if (anyImg && anyImg.src) return anyImg.src;
     } catch (e) {
       log("Eroare extractImageUrl:", e);
     }
@@ -255,15 +301,15 @@
   // Payload Builder
   // --------------------------
   function buildPayload(amount, sourceTag, btn) {
-    // la Ayvens forțăm linkul către pagina de licitații live
-    const host = location.hostname;
-    const item_link = host.includes("carmarket.ayvens.com")
-      ? "https://carmarket.ayvens.com/live"
-      : location.href;
+    // Link special pentru Ayvens – ii trimitem mereu pagina de live
+    let itemLink = location.href;
+    if (location.hostname.includes("ayvens")) {
+      itemLink = "https://carmarket.ayvens.com/live";
+    }
 
     return {
       client_id: CLIENT_ID,
-      item_link: item_link,
+      item_link: itemLink,
       item_title: extractItemTitle(btn),
       bid_amount: amount,
       currency: "EUR",
@@ -409,6 +455,7 @@
         return;
       }
 
+      // preluam body-ul ca text
       let bodyText = "";
       if (typeof body === "string") {
         bodyText = body;
