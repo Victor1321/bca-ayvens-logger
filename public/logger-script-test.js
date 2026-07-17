@@ -235,14 +235,27 @@
     }
   }
 
-  function extractImageUrlFromCard(card) {
+  // ----- Extrage imaginea folosind VehicleSale ID -----
+  function extractImageUrlByVehicleSaleId(vehicleSaleId) {
     try {
-      let img = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture']");
-      if (img && img.src) return img.src;
-      let anyImg = card.querySelector("img");
-      if (anyImg && anyImg.src) return anyImg.src;
+      // Caută imaginea cu ID-ul specific: vehicle-default-picture-vehicle-<ID>
+      const imgId = `vehicle-default-picture-vehicle-${vehicleSaleId}`;
+      const img = document.getElementById(imgId);
+      if (img && img.src) {
+        console.log("[LOGGER] Imagine găsită după ID:", imgId);
+        return img.src;
+      }
+
+      // Fallback: caută în cardul care conține acest ID
+      const card = document.querySelector(`[data-vehicle-id="${vehicleSaleId}"]`);
+      if (card) {
+        const imgInCard = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture']");
+        if (imgInCard && imgInCard.src) return imgInCard.src;
+      }
+
       return null;
     } catch (e) {
+      logError("extractImageUrlByVehicleSaleId:", e);
       return null;
     }
   }
@@ -506,6 +519,16 @@
             }
           }
 
+          // ----- Extrage imaginea folosind vehicleSaleId -----
+          let imageUrl = null;
+          if (vehicleSaleId) {
+            imageUrl = extractImageUrlByVehicleSaleId(vehicleSaleId);
+          }
+          // Dacă nu am găsit cu ID, încearcă din card
+          if (!imageUrl && card) {
+            imageUrl = card.querySelector(".vehicle-picture img")?.src || null;
+          }
+
           // ----- Construiește payload -----
           const payload = {
             client_id: CLIENT_ID,
@@ -515,7 +538,7 @@
             currency: "EUR",
             timestamp: timestamp(),
             source: "xhr-bid",
-            image_url: card ? extractImageUrlFromCard(card) : null,
+            image_url: imageUrl,
             mileage: card ? extractMileageFromCard(card) : "N/A",
             registration_date: card ? extractRegistrationDateFromCard(card) : "N/A",
             fuel: card ? extractFuelFromCard(card) : "N/A",
