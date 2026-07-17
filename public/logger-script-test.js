@@ -11,12 +11,16 @@
     "ee.bca-europe.com",
     "idp.bca-online-auctions.eu",
     "carmarket.ayvens.com",
+    "www.bca.com",
+    "bca.com",
+    "login.bca.com",
   ];
 
   const BID_KEYWORDS = [
     "bid", "licit", "liciteaz", "offer", "oferta", "ofertă",
     "place", "submit", "confirm", "confirmă", "confirma",
-    "new offer", "oferta noua", "ofertă nouă", "oferta noua"
+    "new offer", "oferta noua", "ofertă nouă", "oferta noua",
+    "licitează", "bid now", "buy now"
   ];
 
   const CLICK_WINDOW_MS = 5000;
@@ -58,7 +62,7 @@
     return nr;
   }
 
-  // ----- Găsește cardul părinte (folosește aceeași logică peste tot) -----
+  // ----- Găsește cardul părinte (pentru Ayvens) -----
   function findParentCard(btn) {
     if (!btn) return null;
     let card = btn.closest(".card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card");
@@ -81,142 +85,143 @@
     return card;
   }
 
-  // ----- Extrage titlul (pentru BCA și fallback Ayvens) -----
-  function extractItemTitle(btn) {
+  // ----- EXTRAGERE PENTRU BCA (direct din DOM, fără btn) -----
+  function extractBCATitle() {
     try {
-      const host = location.hostname.toLowerCase();
-
-      function isBadTitle(t) {
-        if (!t) return true;
-        const s = t.trim().toLowerCase();
-        return ["solicitați informații", "solicitati informatii", "request info", "request information"].includes(s);
+      const title = document.querySelector("h2.viewlot__headline.viewlot__headline--large");
+      if (title && title.innerText.trim()) {
+        return title.innerText.trim();
       }
+      const fallback = document.querySelector("h1, h2.viewlot_headline");
+      return fallback ? fallback.innerText.trim() : "Titlu indisponibil";
+    } catch (e) {
+      logError("extractBCATitle:", e);
+      return "Titlu indisponibil";
+    }
+  }
 
-      if (host.includes("ayvens")) {
-        const card = findParentCard(btn);
-        if (card) {
-          let h2 = card.querySelector("h2.vehicle-title");
-          if (h2) {
-            let txt = h2.textContent.trim().replace(/RECOMANDAT/g, "").trim();
-            if (txt && !isBadTitle(txt)) return txt;
-          }
-          let title = card.querySelector(".vehicle-title");
-          if (title) {
-            let txt = title.textContent.trim().replace(/RECOMANDAT/g, "").trim();
-            if (txt && !isBadTitle(txt)) return txt;
-          }
-        }
-        let h2 = document.querySelector("h2.vehicle-title");
+  function extractBCASubheadline() {
+    try {
+      const el = document.querySelector(".viewlot__subheadline");
+      if (!el) return { mileage: "N/A", registrationDate: "N/A", fuel: "N/A" };
+
+      const text = el.innerText.trim();
+      // Exemplu: "(194PS), PHEV Diesel, , 169406 km, 13/09/2021"
+      // Extrage kilometrajul (nr cu "km")
+      const kmMatch = text.match(/([\d.,]+)\s*km/);
+      const mileage = kmMatch ? kmMatch[1].trim() + " km" : "N/A";
+
+      // Extrage data (format: DD/MM/YYYY)
+      const dateMatch = text.match(/\b(\d{2}\/\d{2}\/\d{4})\b/);
+      const registrationDate = dateMatch ? dateMatch[1] : "N/A";
+
+      // Extrage combustibilul (între paranteză după primul cuvânt)
+      // Caută "Benzina", "Diesel", "PHEV", "Electric", "Hybrid"
+      const fuelMatch = text.match(/(Benzina|Diesel|PHEV|Electric|Hybrid|Benzină)/i);
+      const fuel = fuelMatch ? fuelMatch[1] : "N/A";
+
+      return { mileage, registrationDate, fuel };
+    } catch (e) {
+      logError("extractBCASubheadline:", e);
+      return { mileage: "N/A", registrationDate: "N/A", fuel: "N/A" };
+    }
+  }
+
+  function extractBCAImage() {
+    try {
+      const img = document.querySelector(".viewlot__img img.MainImg, .MainImg.vehicleImage");
+      if (img && img.src) return img.src;
+      const fallback = document.querySelector(".viewlot__img img");
+      if (fallback && fallback.src) return fallback.src;
+      return null;
+    } catch (e) {
+      logError("extractBCAImage:", e);
+      return null;
+    }
+  }
+
+  // ----- Extrage titlul (pentru Ayvens) -----
+  function extractAyvensTitle(btn) {
+    try {
+      const card = findParentCard(btn);
+      if (card) {
+        let h2 = card.querySelector("h2.vehicle-title");
         if (h2) {
           let txt = h2.textContent.trim().replace(/RECOMANDAT/g, "").trim();
-          if (txt && !isBadTitle(txt)) return txt;
+          if (txt) return txt;
+        }
+        let title = card.querySelector(".vehicle-title");
+        if (title) {
+          let txt = title.textContent.trim().replace(/RECOMANDAT/g, "").trim();
+          if (txt) return txt;
         }
       }
-
-      if (host.includes("bca-europe.com") || host.includes("bca-online-auctions.eu") || host.endsWith("bca.com")) {
-        const card = findParentCard(btn);
-        if (card) {
-          let title = card.querySelector("h2.viewlot_headline, h1.viewlot_headline");
-          if (title) {
-            let txt = title.textContent.trim();
-            if (txt && !isBadTitle(txt)) return txt;
-          }
-        }
-        let bcaTitle = document.querySelector("h2.viewlot_headline.viewlotheadline--large, h1.viewlotheadline.viewlot_headline--large");
-        if (bcaTitle) {
-          let txt = bcaTitle.textContent.trim();
-          if (txt && !isBadTitle(txt)) return txt;
-        }
-      }
-
-      let h = document.querySelector("h1, h2, h3");
-      if (h) {
-        let txt = h.textContent.trim();
-        if (txt && !isBadTitle(txt)) return txt;
+      let h2 = document.querySelector("h2.vehicle-title");
+      if (h2) {
+        let txt = h2.textContent.trim().replace(/RECOMANDAT/g, "").trim();
+        if (txt) return txt;
       }
       return "Titlu indisponibil";
     } catch (e) {
-      logError("extractItemTitle:", e);
+      logError("extractAyvensTitle:", e);
       return "Titlu indisponibil";
     }
   }
 
-  // ----- Extrage imaginea (pentru BCA și fallback Ayvens) -----
-  function extractImageUrl(btn) {
+  // ----- Extrage imaginea (pentru Ayvens) -----
+  function extractAyvensImage(btn) {
     try {
-      const host = location.hostname;
-
-      if (host.includes("ayvens")) {
-        const card = findParentCard(btn);
-        if (card) {
-          let img = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture'], .vehicle-picture img[src]");
-          if (img && img.src) return img.src;
-          let anyImg = card.querySelector("img");
-          if (anyImg && anyImg.src) return anyImg.src;
-        }
-        let img = document.querySelector(".vehicle-picture img");
+      const card = findParentCard(btn);
+      if (card) {
+        let img = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture'], .vehicle-picture img[src]");
         if (img && img.src) return img.src;
+        let anyImg = card.querySelector("img");
+        if (anyImg && anyImg.src) return anyImg.src;
       }
-
-      if (host.includes("bca-europe.com") || host.includes("bca-online-auctions.eu") || host.endsWith("bca.com")) {
-        const card = findParentCard(btn);
-        if (card) {
-          let img = card.querySelector(".viewlot__img img.MainImg, .ImageA img");
-          if (img && img.src) return img.src;
-        }
-        let img = document.querySelector(".viewlot__img img.MainImg");
-        if (img && img.src) return img.src;
-        img = document.querySelector(".ImageA img");
-        if (img && img.src) return img.src;
-      }
-
-      let anyImg = document.querySelector("img");
-      if (anyImg && anyImg.src) return anyImg.src;
+      let img = document.querySelector(".vehicle-picture img");
+      if (img && img.src) return img.src;
+      return null;
     } catch (e) {
-      logError("extractImageUrl:", e);
+      logError("extractAyvensImage:", e);
+      return null;
     }
-    return null;
   }
 
-  // ----- Extrage specificațiile (pentru BCA și fallback Ayvens) -----
-  function extractVehicleSpecs(btn) {
+  // ----- Extrage specificațiile (pentru Ayvens) -----
+  function extractAyvensSpecs(btn) {
     try {
-      const host = location.hostname;
-      let specs = { mileage: null, registrationDate: null, fuel: null, gearbox: null };
+      let specs = { mileage: "N/A", registrationDate: "N/A", fuel: "N/A", gearbox: "N/A" };
+      const card = findParentCard(btn);
+      if (!card) return specs;
 
-      if (host.includes("ayvens")) {
-        const card = findParentCard(btn);
-        if (!card) return specs;
-
-        const textElements = card.querySelectorAll(".vehicle-specifications-text");
-        textElements.forEach(el => {
-          const text = el.textContent.trim();
-          if (text.includes("mi.") && text.includes("|")) {
-            const parts = text.split("|").map(s => s.trim());
-            if (parts.length >= 2) {
-              specs.mileage = parts[0];
-              specs.registrationDate = parts[1];
-            }
+      const textElements = card.querySelectorAll(".vehicle-specifications-text");
+      textElements.forEach(el => {
+        const text = el.textContent.trim();
+        if (text.includes("mi.") && text.includes("|")) {
+          const parts = text.split("|").map(s => s.trim());
+          if (parts.length >= 2) {
+            specs.mileage = parts[0];
+            specs.registrationDate = parts[1];
           }
-          if (text.includes("Benzina") || text.includes("Diesel") || text.includes("Electric")) {
-            const parts = text.split("|").map(s => s.trim());
-            if (parts.length >= 2) {
-              specs.fuel = parts[0];
-              specs.gearbox = parts[1];
-            } else {
-              specs.fuel = text;
-            }
+        }
+        if (text.includes("Benzina") || text.includes("Diesel") || text.includes("Electric")) {
+          const parts = text.split("|").map(s => s.trim());
+          if (parts.length >= 2) {
+            specs.fuel = parts[0];
+            specs.gearbox = parts[1];
+          } else {
+            specs.fuel = text;
           }
-        });
-      }
+        }
+      });
       return specs;
     } catch (e) {
-      logError("extractVehicleSpecs:", e);
-      return {};
+      logError("extractAyvensSpecs:", e);
+      return { mileage: "N/A", registrationDate: "N/A", fuel: "N/A", gearbox: "N/A" };
     }
   }
 
-  // ----- EXTRAGERE DIRECT DIN CARD (pentru Ayvens) -----
+  // ----- EXTRAGERE DIRECT DIN CARD (pentru Ayvens via XHR) -----
   function extractItemTitleFromCard(card) {
     try {
       const h2 = card.querySelector("h2.vehicle-title");
@@ -235,24 +240,19 @@
     }
   }
 
-  // ----- Extrage imaginea folosind VehicleSale ID -----
   function extractImageUrlByVehicleSaleId(vehicleSaleId) {
     try {
-      // Caută imaginea cu ID-ul specific: vehicle-default-picture-vehicle-<ID>
       const imgId = `vehicle-default-picture-vehicle-${vehicleSaleId}`;
       const img = document.getElementById(imgId);
       if (img && img.src) {
         console.log("[LOGGER] Imagine găsită după ID:", imgId);
         return img.src;
       }
-
-      // Fallback: caută în cardul care conține acest ID
       const card = document.querySelector(`[data-vehicle-id="${vehicleSaleId}"]`);
       if (card) {
         const imgInCard = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture']");
         if (imgInCard && imgInCard.src) return imgInCard.src;
       }
-
       return null;
     } catch (e) {
       logError("extractImageUrlByVehicleSaleId:", e);
@@ -342,28 +342,51 @@
     return true;
   }
 
-  // ----- BUILD PAYLOAD (pentru BCA și fallback Ayvens) -----
+  // ----- BUILD PAYLOAD (pentru BCA și Ayvens) -----
   function buildPayload(amount, sourceTag, btn) {
+    const host = location.hostname;
     let itemLink = location.href;
-    if (location.hostname.includes("ayvens")) {
-      itemLink = "https://carmarket.ayvens.com/live";
-    }
+    let title, imageUrl, mileage, registrationDate, fuel, gearbox;
 
-    const specs = extractVehicleSpecs(btn);
+    if (host.includes("ayvens")) {
+      itemLink = "https://carmarket.ayvens.com/live";
+      const specs = extractAyvensSpecs(btn);
+      title = extractAyvensTitle(btn);
+      imageUrl = extractAyvensImage(btn);
+      mileage = specs.mileage;
+      registrationDate = specs.registrationDate;
+      fuel = specs.fuel;
+      gearbox = specs.gearbox;
+    } else if (host.includes("bca-europe.com") || host.includes("bca-online-auctions.eu") || host.endsWith("bca.com")) {
+      title = extractBCATitle();
+      const sub = extractBCASubheadline();
+      imageUrl = extractBCAImage();
+      mileage = sub.mileage;
+      registrationDate = sub.registrationDate;
+      fuel = sub.fuel;
+      gearbox = "N/A";
+    } else {
+      title = "Titlu indisponibil";
+      imageUrl = null;
+      mileage = "N/A";
+      registrationDate = "N/A";
+      fuel = "N/A";
+      gearbox = "N/A";
+    }
 
     return {
       client_id: CLIENT_ID,
       item_link: itemLink,
-      item_title: extractItemTitle(btn),
+      item_title: title,
       bid_amount: amount,
       currency: "EUR",
       timestamp: timestamp(),
       source: sourceTag,
-      image_url: extractImageUrl(btn),
-      mileage: specs.mileage || "N/A",
-      registration_date: specs.registrationDate || "N/A",
-      fuel: specs.fuel || "N/A",
-      gearbox: specs.gearbox || "N/A",
+      image_url: imageUrl,
+      mileage: mileage || "N/A",
+      registration_date: registrationDate || "N/A",
+      fuel: fuel || "N/A",
+      gearbox: gearbox || "N/A",
     };
   }
 
@@ -407,7 +430,6 @@
           let amount = null;
           let vehicleSaleId = null;
 
-          // ----- Extrage Amount și VehicleSale din body -----
           let bodyText = "";
           if (typeof body === "string") {
             bodyText = body;
@@ -436,7 +458,6 @@
             } catch (e) {}
           }
 
-          // Dacă nu am găsit amount, încearcă prin regex
           if (!amount && bodyText) {
             const numbers = bodyText.match(/\d{2,}/g);
             if (numbers) {
@@ -456,19 +477,14 @@
             return;
           }
 
-          // ----- Găsește cardul folosind VehicleSale -----
           let card = null;
           if (vehicleSaleId) {
             console.log("[LOGGER] Caut card cu VehicleSale ID:", vehicleSaleId);
-
-            // Metoda 1: Caută un element cu data-vehicle-id
             const vehicleEl = document.querySelector(`[data-vehicle-id="${vehicleSaleId}"]`);
             if (vehicleEl) {
               card = vehicleEl.closest('.card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card');
               console.log("[LOGGER] Card găsit prin data-vehicle-id:", card);
             }
-
-            // Metoda 2: Caută în data-bid-area-information
             if (!card) {
               const allElements = document.querySelectorAll('[data-bid-area-information]');
               for (const el of allElements) {
@@ -483,8 +499,6 @@
                 } catch (e) {}
               }
             }
-
-            // Metoda 3: Caută în data-sale-id
             if (!card) {
               const saleEl = document.querySelector(`[data-sale-id="${vehicleSaleId}"]`);
               if (saleEl) {
@@ -492,18 +506,8 @@
                 console.log("[LOGGER] Card găsit prin data-sale-id:", card);
               }
             }
-
-            // Metoda 4: Caută în data-sale-condition-id
-            if (!card) {
-              const conditionEl = document.querySelector(`[data-sale-condition-id="${vehicleSaleId}"]`);
-              if (conditionEl) {
-                card = conditionEl.closest('.card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card');
-                console.log("[LOGGER] Card găsit prin data-sale-condition-id:", card);
-              }
-            }
           }
 
-          // Dacă nu am găsit card prin ID, folosește fallback-ul global
           if (!card) {
             console.log("[LOGGER] Nu am găsit card prin ID, folosesc fallback global.");
             const inputs = document.querySelectorAll('.bid-offer-input');
@@ -519,17 +523,14 @@
             }
           }
 
-          // ----- Extrage imaginea folosind vehicleSaleId -----
           let imageUrl = null;
           if (vehicleSaleId) {
             imageUrl = extractImageUrlByVehicleSaleId(vehicleSaleId);
           }
-          // Dacă nu am găsit cu ID, încearcă din card
           if (!imageUrl && card) {
             imageUrl = card.querySelector(".vehicle-picture img")?.src || null;
           }
 
-          // ----- Construiește payload -----
           const payload = {
             client_id: CLIENT_ID,
             item_link: location.href.includes('carmarket.ayvens.com') ? "https://carmarket.ayvens.com/live" : location.href,
@@ -548,7 +549,7 @@
           sendToServer(payload);
         }
       } catch (e) {
-        logError("XHR interceptor:", e);
+        logError("XHR interceptor Ayvens:", e);
       }
       return origSend.apply(this, arguments);
     };
@@ -564,7 +565,18 @@
       const txt = (btn.innerText || btn.value || "").trim();
       if (!textContainsKeyword(txt)) return;
 
-      const amount = extractNumber(btn.innerText || btn.value || "") || extractNumber(document.querySelector("input[type='text']")?.value || "");
+      // Caută suma în inputurile vizibile (prețul)
+      let amount = null;
+      const inputs = document.querySelectorAll("input[type='text']");
+      for (const inp of inputs) {
+        if (inp.value && inp.value.includes('€')) {
+          const nr = extractNumber(inp.value);
+          if (nr) {
+            amount = nr;
+            break;
+          }
+        }
+      }
 
       lastClickInfo = {
         time: now(),
@@ -675,6 +687,251 @@
       return origFetch.apply(this, arguments);
     };
   })();
+
+
+    // =========================================================
+  // LOGICA PENTRU idp.bca-online-auctions.eu (PROXY BIDDING)
+  // =========================================================
+  if (location.hostname.includes("idp.bca-online-auctions.eu")) {
+    console.log("[LOGGER] Mod Proxy Bidding activat pe", location.hostname);
+
+    // ----- Extrage titlul mașinii din pagină -----
+    function extractIdpTitle() {
+      try {
+        // Caută titlul în elementele care conțin textul mașinii
+        const allElements = document.querySelectorAll("h1, h2, h3, h4, p, div, span, td, li");
+        for (const el of allElements) {
+          const text = el.textContent.trim();
+          // Caută un text care conține anul și modelul mașinii (ex: "Peugeot 308 sw diesel 1.6 E-HDI ACTIVE")
+          if (text.match(/\d{4}\s*[A-Za-z0-9\s\-]+(diesel|benzina|electric|hibrid|gasoleo)/i)) {
+            // Verifică să nu fie text prea lung sau prea scurt
+            if (text.length > 10 && text.length < 200) {
+              return text;
+            }
+          }
+        }
+        // Fallback: caută primul element care conține "Km" sau "km"
+        for (const el of allElements) {
+          const text = el.textContent.trim();
+          if (text.includes("km") || text.includes("Km") || text.includes("KM")) {
+            // Încearcă să extragi doar partea cu mașina
+            const match = text.match(/^([A-Za-z0-9\s\-]+(diesel|benzina|electric|hibrid|gasoleo))/i);
+            if (match) return match[1].trim();
+          }
+        }
+        return "Titlu indisponibil";
+      } catch (e) {
+        logError("extractIdpTitle:", e);
+        return "Titlu indisponibil";
+      }
+    }
+
+    // ----- Extrage kilometrajul din pagină -----
+    function extractIdpMileage() {
+      try {
+        const allElements = document.querySelectorAll("h1, h2, h3, h4, p, div, span, td, li");
+        for (const el of allElements) {
+          const text = el.textContent.trim();
+          // Caută formatul: "225713 Km" sau "225713 km"
+          const match = text.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(km|Km|KM)/);
+          if (match) {
+            const km = match[1].replace(/[.,]/g, "");
+            if (km && parseInt(km) > 1000) {
+              return `${parseInt(km).toLocaleString()} km`;
+            }
+          }
+        }
+        return "N/A";
+      } catch (e) {
+        logError("extractIdpMileage:", e);
+        return "N/A";
+      }
+    }
+
+    // ----- Extrage data înmatriculării -----
+    function extractIdpRegistrationDate() {
+      try {
+        const allElements = document.querySelectorAll("h1, h2, h3, h4, p, div, span, td, li");
+        for (const el of allElements) {
+          const text = el.textContent.trim();
+          // Caută formatul: "10/03/2015" sau "10-03-2015" sau "10.03.2015"
+          const match = text.match(/\b(\d{2}[\/\-.]\d{2}[\/\-.]\d{4})\b/);
+          if (match) {
+            return match[1];
+          }
+        }
+        return "N/A";
+      } catch (e) {
+        logError("extractIdpRegistrationDate:", e);
+        return "N/A";
+      }
+    }
+
+    // ----- Extrage combustibilul -----
+    function extractIdpFuel() {
+      try {
+        const allElements = document.querySelectorAll("h1, h2, h3, h4, p, div, span, td, li");
+        for (const el of allElements) {
+          const text = el.textContent.trim().toLowerCase();
+          if (text.includes("diesel") || text.includes("gasoleo")) return "Diesel";
+          if (text.includes("benzina") || text.includes("gasolina")) return "Benzina";
+          if (text.includes("electric") || text.includes("elétrico")) return "Electric";
+          if (text.includes("hibrid") || text.includes("híbrido")) return "Hybrid";
+        }
+        return "N/A";
+      } catch (e) {
+        logError("extractIdpFuel:", e);
+        return "N/A";
+      }
+    }
+
+    // ----- Extrage imaginea -----
+    function extractIdpImage() {
+      try {
+        // Caută imaginea principală
+        const img = document.querySelector(".ImageA img, .vehicle-image img, .lot-image img, img[src*='VehicleImage']");
+        if (img && img.src) return img.src;
+        // Fallback: prima imagine mare
+        const anyImg = document.querySelector("img[width='320'], img[width='300']");
+        if (anyImg && anyImg.src) return anyImg.src;
+        return null;
+      } catch (e) {
+        logError("extractIdpImage:", e);
+        return null;
+      }
+    }
+
+    // ----- Extrage numărul lotului -----
+    function extractIdpLotNumber() {
+      try {
+        const lotEl = document.getElementById("proxyLotNumber");
+        if (lotEl) {
+          const text = lotEl.textContent.trim();
+          const match = text.match(/\d+/);
+          if (match) return match[0];
+        }
+        return "N/A";
+      } catch (e) {
+        return "N/A";
+      }
+    }
+
+    // ----- Build payload pentru idp.bca -----
+    function buildIdpPayload(amount, sourceTag) {
+      return {
+        client_id: CLIENT_ID,
+        item_link: location.href,
+        item_title: extractIdpTitle(),
+        bid_amount: amount,
+        currency: "EUR",
+        timestamp: timestamp(),
+        source: sourceTag,
+        image_url: extractIdpImage(),
+        mileage: extractIdpMileage(),
+        registration_date: extractIdpRegistrationDate(),
+        fuel: extractIdpFuel(),
+        gearbox: "N/A",
+        lot_number: extractIdpLotNumber(),
+      };
+    }
+
+    // ----- Interceptează click pe butonul "Trimite" -----
+    document.addEventListener("click", function (e) {
+      try {
+        // Verifică dacă s-a dat click pe butonul de trimitere sau pe div-ul părinte
+        let btn = e.target.closest("#proxyBidButton a, #proxyBidButton, .PrimaryButton a, .PrimaryButton");
+        if (!btn) {
+          // Verifică dacă elementul are textul "Trimite"
+          if (e.target.textContent && e.target.textContent.trim() === "Trimite") {
+            btn = e.target;
+          }
+        }
+        if (!btn) return;
+
+        // Găsește inputul cu suma
+        const input = document.getElementById("proxyBidValue");
+        if (!input) {
+          console.log("[LOGGER] Nu am găsit inputul #proxyBidValue");
+          return;
+        }
+
+        const amount = extractNumber(input.value);
+        if (!amount) {
+          console.log("[LOGGER] Suma invalidă:", input.value);
+          return;
+        }
+
+        console.log("[LOGGER] Proxy Bid detectat! Suma:", amount);
+
+        const payload = buildIdpPayload(amount, "idp-proxy-bid");
+        sendToServer(payload);
+
+      } catch (err) {
+        logError("Idp click handler:", err);
+      }
+    });
+
+    // ----- Interceptează și requesturile XHR (pentru confirmare) -----
+    (function () {
+      const origSend = XMLHttpRequest.prototype.send;
+      const origOpen = XMLHttpRequest.prototype.open;
+
+      XMLHttpRequest.prototype.open = function (method, url) {
+        this._method = method;
+        this._url = url;
+        return origOpen.apply(this, arguments);
+      };
+
+      XMLHttpRequest.prototype.send = function (body) {
+        try {
+          if (
+            this._method &&
+            this._method.toUpperCase() === "POST" &&
+            this._url &&
+            (this._url.includes('proxy') || this._url.includes('bid') || this._url.includes('offer'))
+          ) {
+            console.log("[LOGGER] Interceptat request proxy bid:", this._url);
+
+            let amount = null;
+            let bodyText = "";
+            if (typeof body === "string") bodyText = body;
+            else if (body instanceof FormData) {
+              const arr = [];
+              body.forEach((v, k) => arr.push(k + "=" + v));
+              bodyText = arr.join("&");
+            } else if (body && typeof body === "object") {
+              try { bodyText = JSON.stringify(body); } catch (e) {}
+            }
+
+            // Încearcă să extragă suma din body
+            if (bodyText) {
+              const numbers = bodyText.match(/\d{2,}/g);
+              if (numbers) {
+                for (let num of numbers) {
+                  const val = parseInt(num);
+                  if (val > 10 && val < 500000) {
+                    amount = val;
+                    console.log("[LOGGER] Suma extrasă din request body:", amount);
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (amount) {
+              const payload = buildIdpPayload(amount, "idp-xhr-bid");
+              sendToServer(payload);
+            }
+          }
+        } catch (e) {
+          logError("Idp XHR interceptor:", e);
+        }
+        return origSend.apply(this, arguments);
+      };
+    })();
+
+    console.log("[LOGGER] Proxy Bidding activat pentru idp.bca-online-auctions.eu");
+  }
 
   // =========================================================
   // PORNIRE
