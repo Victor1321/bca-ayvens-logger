@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// LOGGER-SCRIPT - VERSIUNEA FINALĂ (cu kilometraj și data)
+// LOGGER-SCRIPT - VERSIUNEA COMPLETĂ (BCA + AYVENS)
 // -------------------------------------------------------------
 (function () {
   "use strict";
@@ -81,7 +81,7 @@
     return card;
   }
 
-  // ----- Extrage titlul -----
+  // ----- Extrage titlul (pentru BCA și fallback Ayvens) -----
   function extractItemTitle(btn) {
     try {
       const host = location.hostname.toLowerCase();
@@ -141,7 +141,7 @@
     }
   }
 
-  // ----- Extrage imaginea -----
+  // ----- Extrage imaginea (pentru BCA și fallback Ayvens) -----
   function extractImageUrl(btn) {
     try {
       const host = location.hostname;
@@ -150,13 +150,9 @@
         const card = findParentCard(btn);
         if (card) {
           let img = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture'], .vehicle-picture img[src]");
-          if (img && img.src) {
-            return img.src;
-          }
+          if (img && img.src) return img.src;
           let anyImg = card.querySelector("img");
-          if (anyImg && anyImg.src) {
-            return anyImg.src;
-          }
+          if (anyImg && anyImg.src) return anyImg.src;
         }
         let img = document.querySelector(".vehicle-picture img");
         if (img && img.src) return img.src;
@@ -182,7 +178,7 @@
     return null;
   }
 
-  // ----- Extrage specificațiile (kilometraj, data, combustibil, cutie) -----
+  // ----- Extrage specificațiile (pentru BCA și fallback Ayvens) -----
   function extractVehicleSpecs(btn) {
     try {
       const host = location.hostname;
@@ -220,6 +216,101 @@
     }
   }
 
+  // ----- EXTRAGERE DIRECT DIN CARD (pentru Ayvens) -----
+  function extractItemTitleFromCard(card) {
+    try {
+      const h2 = card.querySelector("h2.vehicle-title");
+      if (h2) {
+        let txt = h2.textContent.trim().replace(/RECOMANDAT/g, "").trim();
+        if (txt) return txt;
+      }
+      const title = card.querySelector(".vehicle-title");
+      if (title) {
+        let txt = title.textContent.trim().replace(/RECOMANDAT/g, "").trim();
+        if (txt) return txt;
+      }
+      return "Titlu indisponibil";
+    } catch (e) {
+      return "Titlu indisponibil";
+    }
+  }
+
+  function extractImageUrlFromCard(card) {
+    try {
+      let img = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture']");
+      if (img && img.src) return img.src;
+      let anyImg = card.querySelector("img");
+      if (anyImg && anyImg.src) return anyImg.src;
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function extractMileageFromCard(card) {
+    try {
+      const elements = card.querySelectorAll(".vehicle-specifications-text");
+      for (const el of elements) {
+        const text = el.textContent.trim();
+        if (text.includes("mi.") && text.includes("|")) {
+          return text.split("|")[0].trim();
+        }
+      }
+      return "N/A";
+    } catch (e) {
+      return "N/A";
+    }
+  }
+
+  function extractRegistrationDateFromCard(card) {
+    try {
+      const elements = card.querySelectorAll(".vehicle-specifications-text");
+      for (const el of elements) {
+        const text = el.textContent.trim();
+        if (text.includes("mi.") && text.includes("|")) {
+          return text.split("|")[1].trim();
+        }
+      }
+      return "N/A";
+    } catch (e) {
+      return "N/A";
+    }
+  }
+
+  function extractFuelFromCard(card) {
+    try {
+      const elements = card.querySelectorAll(".vehicle-specifications-text");
+      for (const el of elements) {
+        const text = el.textContent.trim();
+        if (text.includes("Benzina") || text.includes("Diesel") || text.includes("Electric")) {
+          const parts = text.split("|").map(s => s.trim());
+          if (parts.length >= 2) return parts[0];
+          return text;
+        }
+      }
+      return "N/A";
+    } catch (e) {
+      return "N/A";
+    }
+  }
+
+  function extractGearboxFromCard(card) {
+    try {
+      const elements = card.querySelectorAll(".vehicle-specifications-text");
+      for (const el of elements) {
+        const text = el.textContent.trim();
+        if (text.includes("Benzina") || text.includes("Diesel") || text.includes("Electric")) {
+          const parts = text.split("|").map(s => s.trim());
+          if (parts.length >= 2) return parts[1];
+          return "N/A";
+        }
+      }
+      return "N/A";
+    } catch (e) {
+      return "N/A";
+    }
+  }
+
   // ----- TIMESTAMP -----
   function timestamp() {
     const d = new Date(Date.now() + 2 * 3600000);
@@ -238,7 +329,7 @@
     return true;
   }
 
-  // ----- BUILD PAYLOAD (cu btn) -----
+  // ----- BUILD PAYLOAD (pentru BCA și fallback Ayvens) -----
   function buildPayload(amount, sourceTag, btn) {
     let itemLink = location.href;
     if (location.hostname.includes("ayvens")) {
@@ -278,7 +369,7 @@
   }
 
   // =========================================================
-  // INTERCEPTOR XHR (AYVENS - /sale/bid/)
+  // INTERCEPTOR XHR (AYVENS - /sale/bid/) - NOUA LOGICĂ
   // =========================================================
   (function () {
     const origSend = XMLHttpRequest.prototype.send;
@@ -299,14 +390,23 @@
           this._url.includes('/sale/bid/')
         ) {
           console.log("[LOGGER] Interceptat /sale/bid/");
-          let amount = null;
 
-          if (body && typeof body === "string") {
+          let amount = null;
+          let vehicleSaleId = null;
+
+          // ----- Extrage Amount și VehicleSale din body -----
+          let bodyText = "";
+          if (typeof body === "string") {
+            bodyText = body;
             try {
               const json = JSON.parse(body);
               if (json.Amount !== undefined && json.Amount !== null) {
                 amount = parseInt(json.Amount);
                 console.log("[LOGGER] Suma extrasă din json.Amount:", amount);
+              }
+              if (json.VehicleSale !== undefined) {
+                vehicleSaleId = json.VehicleSale;
+                console.log("[LOGGER] VehicleSale extras:", vehicleSaleId);
               }
             } catch (e) {}
           } else if (body && typeof body === "object") {
@@ -316,29 +416,23 @@
                 amount = parseInt(json.Amount);
                 console.log("[LOGGER] Suma extrasă din json.Amount (object):", amount);
               }
+              if (json.VehicleSale !== undefined) {
+                vehicleSaleId = json.VehicleSale;
+                console.log("[LOGGER] VehicleSale extras (object):", vehicleSaleId);
+              }
             } catch (e) {}
           }
 
-          if (!amount) {
-            let bodyText = "";
-            if (typeof body === "string") bodyText = body;
-            else if (body instanceof FormData) {
-              const arr = [];
-              body.forEach((v, k) => arr.push(k + "=" + v));
-              bodyText = arr.join("&");
-            } else if (body && typeof body === "object") {
-              try { bodyText = JSON.stringify(body); } catch (e) {}
-            }
-            if (bodyText) {
-              const numbers = bodyText.match(/\d{2,}/g);
-              if (numbers) {
-                for (let num of numbers) {
-                  const val = parseInt(num);
-                  if (val > 10 && val < 500000) {
-                    amount = val;
-                    console.log("[LOGGER] Suma extrasă din body (fallback):", amount);
-                    break;
-                  }
+          // Dacă nu am găsit amount, încearcă prin regex
+          if (!amount && bodyText) {
+            const numbers = bodyText.match(/\d{2,}/g);
+            if (numbers) {
+              for (let num of numbers) {
+                const val = parseInt(num);
+                if (val > 10 && val < 500000) {
+                  amount = val;
+                  console.log("[LOGGER] Suma extrasă din body (fallback):", amount);
+                  break;
                 }
               }
             }
@@ -349,65 +443,91 @@
             return;
           }
 
-          // ----- Folosește lastClickInfo.btn pentru a găsi cardul corect -----
-          const payload = buildPayload(amount, "xhr-bid", lastClickInfo ? lastClickInfo.btn : null);
+          // ----- Găsește cardul folosind VehicleSale -----
+          let card = null;
+          if (vehicleSaleId) {
+            console.log("[LOGGER] Caut card cu VehicleSale ID:", vehicleSaleId);
+
+            // Metoda 1: Caută un element cu data-vehicle-id
+            const vehicleEl = document.querySelector(`[data-vehicle-id="${vehicleSaleId}"]`);
+            if (vehicleEl) {
+              card = vehicleEl.closest('.card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card');
+              console.log("[LOGGER] Card găsit prin data-vehicle-id:", card);
+            }
+
+            // Metoda 2: Caută în data-bid-area-information
+            if (!card) {
+              const allElements = document.querySelectorAll('[data-bid-area-information]');
+              for (const el of allElements) {
+                try {
+                  const attr = el.getAttribute('data-bid-area-information');
+                  const data = JSON.parse(attr);
+                  if (data.VehicleId == vehicleSaleId || data.SaleConditionId == vehicleSaleId) {
+                    card = el.closest('.card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card');
+                    console.log("[LOGGER] Card găsit prin data-bid-area-information:", card);
+                    break;
+                  }
+                } catch (e) {}
+              }
+            }
+
+            // Metoda 3: Caută în data-sale-id
+            if (!card) {
+              const saleEl = document.querySelector(`[data-sale-id="${vehicleSaleId}"]`);
+              if (saleEl) {
+                card = saleEl.closest('.card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card');
+                console.log("[LOGGER] Card găsit prin data-sale-id:", card);
+              }
+            }
+
+            // Metoda 4: Caută în data-sale-condition-id
+            if (!card) {
+              const conditionEl = document.querySelector(`[data-sale-condition-id="${vehicleSaleId}"]`);
+              if (conditionEl) {
+                card = conditionEl.closest('.card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card');
+                console.log("[LOGGER] Card găsit prin data-sale-condition-id:", card);
+              }
+            }
+          }
+
+          // Dacă nu am găsit card prin ID, folosește fallback-ul global
+          if (!card) {
+            console.log("[LOGGER] Nu am găsit card prin ID, folosesc fallback global.");
+            const inputs = document.querySelectorAll('.bid-offer-input');
+            for (const inp of inputs) {
+              if (inp.value && inp.value.trim() !== '') {
+                const parentCard = inp.closest('.card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card');
+                if (parentCard) {
+                  card = parentCard;
+                  console.log("[LOGGER] Card găsit prin fallback (input):", card);
+                  break;
+                }
+              }
+            }
+          }
+
+          // ----- Construiește payload -----
+          const payload = {
+            client_id: CLIENT_ID,
+            item_link: location.href.includes('carmarket.ayvens.com') ? "https://carmarket.ayvens.com/live" : location.href,
+            item_title: card ? extractItemTitleFromCard(card) : "Titlu indisponibil",
+            bid_amount: amount,
+            currency: "EUR",
+            timestamp: timestamp(),
+            source: "xhr-bid",
+            image_url: card ? extractImageUrlFromCard(card) : null,
+            mileage: card ? extractMileageFromCard(card) : "N/A",
+            registration_date: card ? extractRegistrationDateFromCard(card) : "N/A",
+            fuel: card ? extractFuelFromCard(card) : "N/A",
+            gearbox: card ? extractGearboxFromCard(card) : "N/A",
+          };
+
           sendToServer(payload);
         }
       } catch (e) {
         logError("XHR interceptor:", e);
       }
       return origSend.apply(this, arguments);
-    };
-  })();
-
-  // --------------------------
-  // INTERCEPTOR FETCH (BACKUP)
-  // --------------------------
-  (function () {
-    const origFetch = window.fetch;
-    window.fetch = function (input, init) {
-      try {
-        const url = typeof input === "string" ? input : (input && input.url) || "";
-        const body = (init && init.body) || null;
-        const method = (init && init.method) || "GET";
-        if (
-          method.toUpperCase() === "POST" &&
-          url.includes('/sale/bid/')
-        ) {
-          console.log("[LOGGER] Interceptat FETCH /sale/bid/");
-          let amount = null;
-          if (body) {
-            try {
-              const json = typeof body === "string" ? JSON.parse(body) : JSON.parse(JSON.stringify(body));
-              if (json.Amount !== undefined && json.Amount !== null) {
-                amount = parseInt(json.Amount);
-                console.log("[LOGGER] Suma extrasă din FETCH json.Amount:", amount);
-              }
-            } catch (e) {}
-          }
-          if (!amount && body) {
-            const bodyText = typeof body === "string" ? body : JSON.stringify(body);
-            const numbers = bodyText.match(/\d{2,}/g);
-            if (numbers) {
-              for (let num of numbers) {
-                const val = parseInt(num);
-                if (val > 10 && val < 500000) {
-                  amount = val;
-                  console.log("[LOGGER] Suma extrasă din FETCH (fallback):", amount);
-                  break;
-                }
-              }
-            }
-          }
-          if (amount) {
-            const payload = buildPayload(amount, "fetch-bid", lastClickInfo ? lastClickInfo.btn : null);
-            sendToServer(payload);
-          }
-        }
-      } catch (e) {
-        logError("fetch interceptor:", e);
-      }
-      return origFetch.apply(this, arguments);
     };
   })();
 
