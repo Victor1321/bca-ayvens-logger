@@ -10,7 +10,7 @@
   // CONFIG
   // --------------------------
   // ATENTIE: endpointul API, NU fisierul .js
-  const SERVER_URL = "https://bca-ayvens.up.railway.app/receive-bid";
+  const SERVER_URL = "https://bca-ayvens-logger.fly.dev/receive-bid";
   const CLIENT_ID = "Marian";
 
   // cuvinte care apar de obicei in butoane / request cand licitezi
