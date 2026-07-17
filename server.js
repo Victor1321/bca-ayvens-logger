@@ -168,7 +168,7 @@ Angajat: <b>${data.client_id || "necunoscut"}</b>
 Titlu: <b>${data.item_title || ""}</b>
 Suma: <b>${data.bid_amount} ${data.currency || "EUR"}</b>
 Link: ${data.item_link || ""}
-La: ${data.timestamp || ""}
+La: ${data.timestamp || new Date().toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
 Kilometraj: ${data.mileage || "N/A"}
 Prima inregistrare: ${data.registration_date || "N/A"}
 Combustibil: ${data.fuel || "N/A"}
