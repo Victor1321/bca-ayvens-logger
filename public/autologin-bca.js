@@ -161,38 +161,54 @@
     // ---------------------------------------------------------
     // 1) Flow pe homepage (click pe „Autentificare”) – FĂRĂ overlay
     // ---------------------------------------------------------
-    async function handleHome() {
-        try {
-            console.log("[AUTOLOGIN-BCA] Sunt pe homepage BCA, caut buton login...");
-    
-            // Caută toate butoanele și filtrează după text
-            const buttons = document.querySelectorAll('button');
-            let loginBtn = null;
-            for (const btn of buttons) {
-                if (btn.textContent.trim() === "Autentificare") {
-                    loginBtn = btn;
+        async function handleHome() {
+    try {
+        console.log("[AUTOLOGIN-BCA] Sunt pe homepage BCA, caut buton login...");
+
+        // Găsește header-ul
+        const header = document.querySelector('header.Header, header[class*="Header"]');
+        if (!header) {
+            throw new Error("Nu am găsit header-ul");
+        }
+
+        // Caută span-ul doar în header
+        const spans = header.querySelectorAll('span');
+        let loginSpan = null;
+        for (const span of spans) {
+            const text = span.textContent.trim();
+            if (text === "Autentificare") {
+                loginSpan = span;
+                break;
+            }
+        }
+
+        if (!loginSpan) {
+            // Fallback: caută în tot documentul
+            const allSpans = document.querySelectorAll('span');
+            for (const span of allSpans) {
+                const text = span.textContent.trim();
+                if (text === "Autentificare") {
+                    loginSpan = span;
                     break;
                 }
             }
-    
-            if (!loginBtn) {
-                // Fallback: caută după clasă
-                loginBtn = document.querySelector('.Button.WithInputHeight');
-                if (loginBtn && loginBtn.textContent.trim() !== "Autentificare") {
-                    loginBtn = null;
-                }
-            }
-    
-            if (!loginBtn) {
-                throw new Error("Nu am găsit butonul cu textul 'Autentificare'");
-            }
-    
-            console.log("[AUTOLOGIN-BCA] Găsit butonul de Autentificare, dau click");
-            loginBtn.click();
-        } catch (e) {
-            console.error("[AUTOLOGIN-BCA] Eroare pe homepage:", e);
         }
+
+        if (!loginSpan) {
+            throw new Error("Nu am găsit span-ul cu textul 'Autentificare'");
+        }
+
+        const loginBtn = loginSpan.closest('button');
+        if (!loginBtn) {
+            throw new Error("Nu am găsit butonul părinte pentru span-ul 'Autentificare'");
+        }
+
+        console.log("[AUTOLOGIN-BCA] Găsit butonul de Autentificare, dau click");
+        loginBtn.click();
+    } catch (e) {
+        console.error("[AUTOLOGIN-BCA] Eroare pe homepage:", e);
     }
+}
 
     // ---------------------------------------------------------
     // 2) Flow pe pagina de login (completez user + parolă) – CU overlay
