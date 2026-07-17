@@ -42,7 +42,7 @@
         #ayvens-autologin-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 1); /* 100% opac */
+            background: rgba(0, 0, 0, 1);
             z-index: 999999;
             display: flex;
             align-items: center;
@@ -110,39 +110,6 @@
         }
     }
 
-/*     // ---------------------------------------------------------
-// Închide popin-ul de feedback (ABTasty NPS)
-// ---------------------------------------------------------
-function closeAyvensFeedbackPopin() {
-    let attempts = 0;
-    const maxAttempts = 40; // ~20 sec (40 * 500ms)
-
-    const timer = setInterval(() => {
-        attempts++;
-
-        const container = document.getElementById("ABTasty1228544");
-        if (container) {
-            // zona din spate (în afara .content)
-            const underlay = container.querySelector(".underlay");
-            // butonul X (fallback)
-            const cross = container.querySelector(".content .cross");
-
-            const target = underlay || cross || container;
-
-            console.log("[AUTOLOGIN-AYVENS] Popin NPS găsit, dau click pe overlay.");
-            target.click();
-
-            clearInterval(timer);
-            return;
-        }
-
-        if (attempts >= maxAttempts) {
-            console.log("[AUTOLOGIN-AYVENS] Nu am găsit popinul NPS (timeout).");
-            clearInterval(timer);
-        }
-    }, 500);
-} */
-
     // ---------------------------------------------------------
     // Bridge: cere credențialele de la extensie
     // ---------------------------------------------------------
@@ -199,11 +166,11 @@ function closeAyvensFeedbackPopin() {
 
             // 3) Așteptăm câmpurile username + parolă din modalul lor
             const userInput = await waitFor(
-                "#username, input#username, input[controlname='username']",
+                "#userName, input[id='userName'], input[controlname='userName']",
                 15000
             );
             const passInput = await waitFor(
-                "#password, input#password, input[controlname='password'][type='password']",
+                "#password, input[id='password'], input[controlname='password']",
                 15000
             );
 
@@ -230,7 +197,7 @@ function closeAyvensFeedbackPopin() {
 
             // 6) Buton "Conectare" din modal (#btn_login)
             const submitBtn = await waitFor(
-                "#btn_login, button#btn_login",
+                "#btn_login, button[id='btn_login']",
                 15000
             );
 
@@ -242,9 +209,6 @@ function closeAyvensFeedbackPopin() {
 
             submitBtn.click();
             console.log("[AUTOLOGIN-AYVENS] Am apăsat Conectare (#btn_login), aștept rezultat...");
-
-            // încearcă să închidă popin-ul de feedback după login
-            closeAyvensFeedbackPopin();
 
             // după puțin timp ascundem overlay-ul (în mod normal deja e redirect/logged-in)
             setTimeout(() => {
