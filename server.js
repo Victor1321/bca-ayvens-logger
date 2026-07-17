@@ -170,7 +170,7 @@ Suma: <b>${data.bid_amount} ${data.currency || "EUR"}</b>
 Link: ${data.item_link || ""}
 La: ${data.timestamp || ""}
 Kilometraj: ${data.mileage || "N/A"}
-Data inmatricularii: ${data.registration_date || "N/A"}
+Prima inregistrare: ${data.registration_date || "N/A"}
 Combustibil: ${data.fuel || "N/A"}
 Cutie: ${data.gearbox || "N/A"}`;
 
