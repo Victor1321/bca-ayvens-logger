@@ -162,13 +162,13 @@ app.post("/receive-bid", async (req, res) => {
   console.log("⚡ BID RECEIVED:", data);
 
   const baseMsg =
-`<b>🚨 LICITATIE NOUA</b>
+`<b>LICITATIE NOUA</b>
 
-👤 Angajat: <b>${data.client_id || "necunoscut"}</b>
-🚗 Titlu: <b>${data.item_title || ""}</b>
-💶 Suma: <b>${data.bid_amount} ${data.currency || "EUR"}</b>
-🔗 Link: ${data.item_link || ""}
-🕒 La: ${data.timestamp || ""}
+Angajat: <b>${data.client_id || "necunoscut"}</b>
+Titlu: <b>${data.item_title || ""}</b>
+Suma: <b>${data.bid_amount} ${data.currency || "EUR"}</b>
+Link: ${data.item_link || ""}
+La: ${data.timestamp || ""}
 Kilometraj: ${data.mileage || "N/A"}
 Data inmatricularii: ${data.registration_date || "N/A"}
 Combustibil: ${data.fuel || "N/A"}
