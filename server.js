@@ -62,7 +62,12 @@ async function sendToTelegram(message) {
   try {
     const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
 
-    await fetch(url, {
+    console.log("📤 Trimit mesaj text către Telegram...");
+    console.log("🔍 URL:", url);
+    console.log("🔍 Chat ID:", TELEGRAM_CHAT_ID);
+    console.log("🔍 Mesaj (primii 100 caractere):", message.substring(0, 100));
+
+    const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -72,7 +77,14 @@ async function sendToTelegram(message) {
       }),
     });
 
-    console.log("📨 Trimisa licitația la Telegram (text)");
+    const responseData = await response.json();
+    console.log("📨 Răspuns Telegram (text):", responseData);
+
+    if (!response.ok) {
+      console.error("❌ Eroare Telegram (text):", responseData);
+    } else {
+      console.log("✅ Mesaj text trimis cu succes!");
+    }
   } catch (err) {
     console.error("❌ Eroare Telegram (sendMessage):", err);
   }
@@ -85,7 +97,13 @@ async function sendPhotoToTelegram(photoUrl, caption) {
   try {
     const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`;
 
-    await fetch(url, {
+    console.log("📤 Trimit poză către Telegram...");
+    console.log("🔍 URL:", url);
+    console.log("🔍 Chat ID:", TELEGRAM_CHAT_ID);
+    console.log("🔍 Photo URL:", photoUrl);
+    console.log("🔍 Caption (primii 100 caractere):", caption.substring(0, 100));
+
+    const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -96,7 +114,14 @@ async function sendPhotoToTelegram(photoUrl, caption) {
       }),
     });
 
-    console.log("📨 Trimisa licitația la Telegram (photo)");
+    const responseData = await response.json();
+    console.log("📨 Răspuns Telegram (photo):", responseData);
+
+    if (!response.ok) {
+      console.error("❌ Eroare Telegram (photo):", responseData);
+    } else {
+      console.log("✅ Poză trimisă cu succes!");
+    }
   } catch (err) {
     console.error("❌ Eroare Telegram (sendPhoto):", err);
   }
