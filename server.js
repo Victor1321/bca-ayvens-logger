@@ -1,6 +1,6 @@
 // ======================================================
 //  SERVER COMPLET — AUTOLOGIN BCA + AYVENS + LOGGER + TELEGRAM
-//  CommonJS (compatibil Railway / Node 18+)
+//  CommonJS SALUT
 // ======================================================
 
 const path = require("path");
