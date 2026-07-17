@@ -364,7 +364,19 @@
   // ----- BUILD PAYLOAD (pentru BCA și Ayvens) -----
   function buildPayload(amount, sourceTag, btn) {
     const host = location.hostname;
+    // Extrage doar URL-ul de bază (până la primul '&' sau '?' după ID)
     let itemLink = location.href;
+    // Pentru BCA, scurtează link-ul
+    if (location.hostname.includes('bca-europe.com') || location.hostname.includes('bca-online-auctions.eu')) {
+      const match = location.href.match(/^(https?:\/\/[^\/]+\/Lot\?id=[^&]+)/);
+      if (match) {
+        itemLink = match[1];
+      } else {
+        // Fallback: ia doar până la primul '&'
+        const baseUrl = location.href.split('&')[0];
+        if (baseUrl) itemLink = baseUrl;
+      }
+    }
     let title, imageUrl, mileage, registrationDate, fuel, gearbox;
 
     if (host.includes("ayvens")) {
