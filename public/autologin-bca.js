@@ -162,16 +162,29 @@
     // 1) Flow pe homepage (click pe „Autentificare”) – FĂRĂ overlay
     // ---------------------------------------------------------
     async function handleHome() {
-        try {
-            console.log("[AUTOLOGIN-BCA] Sunt pe homepage BCA, caut buton login...");
+    try {
+        console.log("[AUTOLOGIN-BCA] Sunt pe homepage BCA, caut buton login...");
 
-            const loginBtn = await waitFor('a[data-el="login"]', 15000);
-            console.log("[AUTOLOGIN-BCA] Găsit butonul de Autentificare, dau click");
-            loginBtn.click();
-        } catch (e) {
-            console.error("[AUTOLOGIN-BCA] Eroare pe homepage:", e);
+        // Caută toate butoanele și filtrează după text
+        const buttons = document.querySelectorAll('button');
+        let loginBtn = null;
+        for (const btn of buttons) {
+            if (btn.textContent.trim() === "Autentificare") {
+                loginBtn = btn;
+                break;
+            }
         }
+
+        if (!loginBtn) {
+            throw new Error("Nu am găsit butonul cu textul 'Autentificare'");
+        }
+
+        console.log("[AUTOLOGIN-BCA] Găsit butonul de Autentificare, dau click");
+        loginBtn.click();
+    } catch (e) {
+        console.error("[AUTOLOGIN-BCA] Eroare pe homepage:", e);
     }
+}
 
     // ---------------------------------------------------------
     // 2) Flow pe pagina de login (completez user + parolă) – CU overlay
