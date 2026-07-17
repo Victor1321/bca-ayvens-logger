@@ -106,17 +106,12 @@
       if (!el) return { mileage: "N/A", registrationDate: "N/A", fuel: "N/A" };
 
       const text = el.innerText.trim();
-      // Exemplu: "(194PS), PHEV Diesel, , 169406 km, 13/09/2021"
-      // Extrage kilometrajul (nr cu "km")
       const kmMatch = text.match(/([\d.,]+)\s*km/);
       const mileage = kmMatch ? kmMatch[1].trim() + " km" : "N/A";
 
-      // Extrage data (format: DD/MM/YYYY)
       const dateMatch = text.match(/\b(\d{2}\/\d{2}\/\d{4})\b/);
       const registrationDate = dateMatch ? dateMatch[1] : "N/A";
 
-      // Extrage combustibilul (între paranteză după primul cuvânt)
-      // Caută "Benzina", "Diesel", "PHEV", "Electric", "Hybrid"
       const fuelMatch = text.match(/(Benzina|Diesel|PHEV|Electric|Hybrid|Benzină)/i);
       const fuel = fuelMatch ? fuelMatch[1] : "N/A";
 
@@ -136,6 +131,30 @@
       return null;
     } catch (e) {
       logError("extractBCAImage:", e);
+      return null;
+    }
+  }
+
+  // ----- Extrage data primei înmatriculări din tabelul de detalii BCA -----
+  function extractBCARegistrationDateFromTable() {
+    try {
+      const rows = document.querySelectorAll('tr');
+      for (const row of rows) {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 2) {
+          const label = cells[0].textContent.trim();
+          if (label.includes('Data primei înregistrări') || label.includes('Data primei inregistrari')) {
+            const date = cells[1].textContent.trim();
+            if (date) {
+              console.log("[LOGGER] Data primei înmatriculări (tabel):", date);
+              return date;
+            }
+          }
+        }
+      }
+      return null;
+    } catch (e) {
+      logError("extractBCARegistrationDateFromTable:", e);
       return null;
     }
   }
@@ -362,7 +381,12 @@
       const sub = extractBCASubheadline();
       imageUrl = extractBCAImage();
       mileage = sub.mileage;
-      registrationDate = sub.registrationDate;
+      // Încearcă mai întâi data din tabel, apoi din subtitlu
+      let regDate = extractBCARegistrationDateFromTable();
+      if (!regDate || regDate === "N/A") {
+        regDate = sub.registrationDate;
+      }
+      registrationDate = regDate || "N/A";
       fuel = sub.fuel;
       gearbox = "N/A";
     } else {
@@ -565,7 +589,6 @@
       const txt = (btn.innerText || btn.value || "").trim();
       if (!textContainsKeyword(txt)) return;
 
-      // Caută suma în inputurile vizibile (prețul)
       let amount = null;
       const inputs = document.querySelectorAll("input[type='text']");
       for (const inp of inputs) {
@@ -695,26 +718,20 @@
   if (location.hostname.includes("idp.bca-online-auctions.eu")) {
     console.log("[LOGGER] Mod Proxy Bidding activat pe", location.hostname);
 
-    // ----- Extrage titlul mașinii din pagină -----
     function extractIdpTitle() {
       try {
-        // Caută titlul în elementele care conțin textul mașinii
         const allElements = document.querySelectorAll("h1, h2, h3, h4, p, div, span, td, li");
         for (const el of allElements) {
           const text = el.textContent.trim();
-          // Caută un text care conține anul și modelul mașinii (ex: "Peugeot 308 sw diesel 1.6 E-HDI ACTIVE")
           if (text.match(/\d{4}\s*[A-Za-z0-9\s\-]+(diesel|benzina|electric|hibrid|gasoleo)/i)) {
-            // Verifică să nu fie text prea lung sau prea scurt
             if (text.length > 10 && text.length < 200) {
               return text;
             }
           }
         }
-        // Fallback: caută primul element care conține "Km" sau "km"
         for (const el of allElements) {
           const text = el.textContent.trim();
           if (text.includes("km") || text.includes("Km") || text.includes("KM")) {
-            // Încearcă să extragi doar partea cu mașina
             const match = text.match(/^([A-Za-z0-9\s\-]+(diesel|benzina|electric|hibrid|gasoleo))/i);
             if (match) return match[1].trim();
           }
@@ -726,13 +743,11 @@
       }
     }
 
-    // ----- Extrage kilometrajul din pagină -----
     function extractIdpMileage() {
       try {
         const allElements = document.querySelectorAll("h1, h2, h3, h4, p, div, span, td, li");
         for (const el of allElements) {
           const text = el.textContent.trim();
-          // Caută formatul: "225713 Km" sau "225713 km"
           const match = text.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(km|Km|KM)/);
           if (match) {
             const km = match[1].replace(/[.,]/g, "");
@@ -748,13 +763,11 @@
       }
     }
 
-    // ----- Extrage data înmatriculării -----
     function extractIdpRegistrationDate() {
       try {
         const allElements = document.querySelectorAll("h1, h2, h3, h4, p, div, span, td, li");
         for (const el of allElements) {
           const text = el.textContent.trim();
-          // Caută formatul: "10/03/2015" sau "10-03-2015" sau "10.03.2015"
           const match = text.match(/\b(\d{2}[\/\-.]\d{2}[\/\-.]\d{4})\b/);
           if (match) {
             return match[1];
@@ -767,7 +780,6 @@
       }
     }
 
-    // ----- Extrage combustibilul -----
     function extractIdpFuel() {
       try {
         const allElements = document.querySelectorAll("h1, h2, h3, h4, p, div, span, td, li");
@@ -785,13 +797,10 @@
       }
     }
 
-    // ----- Extrage imaginea -----
     function extractIdpImage() {
       try {
-        // Caută imaginea principală
         const img = document.querySelector(".ImageA img, .vehicle-image img, .lot-image img, img[src*='VehicleImage']");
         if (img && img.src) return img.src;
-        // Fallback: prima imagine mare
         const anyImg = document.querySelector("img[width='320'], img[width='300']");
         if (anyImg && anyImg.src) return anyImg.src;
         return null;
@@ -801,7 +810,6 @@
       }
     }
 
-    // ----- Extrage numărul lotului -----
     function extractIdpLotNumber() {
       try {
         const lotEl = document.getElementById("proxyLotNumber");
@@ -816,7 +824,6 @@
       }
     }
 
-    // ----- Build payload pentru idp.bca -----
     function buildIdpPayload(amount, sourceTag) {
       return {
         client_id: CLIENT_ID,
@@ -835,20 +842,16 @@
       };
     }
 
-    // ----- Interceptează click pe butonul "Trimite" -----
     document.addEventListener("click", function (e) {
       try {
-        // Verifică dacă s-a dat click pe butonul de trimitere sau pe div-ul părinte
         let btn = e.target.closest("#proxyBidButton a, #proxyBidButton, .PrimaryButton a, .PrimaryButton");
         if (!btn) {
-          // Verifică dacă elementul are textul "Trimite"
           if (e.target.textContent && e.target.textContent.trim() === "Trimite") {
             btn = e.target;
           }
         }
         if (!btn) return;
 
-        // Găsește inputul cu suma
         const input = document.getElementById("proxyBidValue");
         if (!input) {
           console.log("[LOGGER] Nu am găsit inputul #proxyBidValue");
@@ -871,7 +874,6 @@
       }
     });
 
-    // ----- Interceptează și requesturile XHR (pentru confirmare) -----
     (function () {
       const origSend = XMLHttpRequest.prototype.send;
       const origOpen = XMLHttpRequest.prototype.open;
@@ -903,7 +905,6 @@
               try { bodyText = JSON.stringify(body); } catch (e) {}
             }
 
-            // Încearcă să extragă suma din body
             if (bodyText) {
               const numbers = bodyText.match(/\d{2,}/g);
               if (numbers) {
