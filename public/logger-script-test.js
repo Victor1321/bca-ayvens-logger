@@ -58,6 +58,29 @@
     return nr;
   }
 
+  // ----- Găsește cardul părinte (folosește aceeași logică peste tot) -----
+  function findParentCard(btn) {
+    if (!btn) return null;
+    let card = btn.closest(".card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card");
+    if (!card) {
+      let parent = btn.parentElement;
+      while (parent && parent !== document.body) {
+        if (parent.classList && (
+          parent.classList.contains("card-body") ||
+          parent.classList.contains("col-lg-9") ||
+          parent.classList.contains("vehicle") ||
+          parent.classList.contains("row") ||
+          parent.classList.contains("card")
+        )) {
+          card = parent;
+          break;
+        }
+        parent = parent.parentElement;
+      }
+    }
+    return card;
+  }
+
   // ----- Extrage titlul -----
   function extractItemTitle(btn) {
     try {
@@ -70,7 +93,7 @@
       }
 
       if (host.includes("ayvens")) {
-        let card = btn ? btn.closest(".card-body, .vehicle, .listing-item, .offer-item, article, .row") : null;
+        const card = findParentCard(btn);
         if (card) {
           let h2 = card.querySelector("h2.vehicle-title");
           if (h2) {
@@ -91,7 +114,7 @@
       }
 
       if (host.includes("bca-europe.com") || host.includes("bca-online-auctions.eu") || host.endsWith("bca.com")) {
-        let card = btn ? btn.closest(".viewlot, .lot, .auction-tile, article, section, div") : null;
+        const card = findParentCard(btn);
         if (card) {
           let title = card.querySelector("h2.viewlot_headline, h1.viewlot_headline");
           if (title) {
@@ -124,17 +147,23 @@
       const host = location.hostname;
 
       if (host.includes("ayvens")) {
-        let card = btn ? btn.closest(".card-body, .vehicle, .listing-item, .offer-item, article, .row") : null;
+        const card = findParentCard(btn);
         if (card) {
-          let img = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture']");
-          if (img && img.src) return img.src;
+          let img = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture'], .vehicle-picture img[src]");
+          if (img && img.src) {
+            return img.src;
+          }
+          let anyImg = card.querySelector("img");
+          if (anyImg && anyImg.src) {
+            return anyImg.src;
+          }
         }
         let img = document.querySelector(".vehicle-picture img");
         if (img && img.src) return img.src;
       }
 
       if (host.includes("bca-europe.com") || host.includes("bca-online-auctions.eu") || host.endsWith("bca.com")) {
-        let card = btn ? btn.closest(".viewlot, .lot, .auction-tile, article, section, div") : null;
+        const card = findParentCard(btn);
         if (card) {
           let img = card.querySelector(".viewlot__img img.MainImg, .ImageA img");
           if (img && img.src) return img.src;
@@ -153,29 +182,26 @@
     return null;
   }
 
-  // ----- Extrage specificațiile (kilometraj, data, etc.) -----
+  // ----- Extrage specificațiile (kilometraj, data, combustibil, cutie) -----
   function extractVehicleSpecs(btn) {
     try {
       const host = location.hostname;
-      let specs = { mileage: null, registrationDate: null, fuel: null, gearbox: null, options: null, stock: null };
+      let specs = { mileage: null, registrationDate: null, fuel: null, gearbox: null };
 
       if (host.includes("ayvens")) {
-        let card = btn ? btn.closest(".card-body, .vehicle, .listing-item, .offer-item, article, .row") : null;
+        const card = findParentCard(btn);
         if (!card) return specs;
 
-        // Caută toate textele din vehicle-specifications-text
         const textElements = card.querySelectorAll(".vehicle-specifications-text");
         textElements.forEach(el => {
           const text = el.textContent.trim();
-          // Kilometraj și data: format "86.665 mi. | 24.06.2021"
           if (text.includes("mi.") && text.includes("|")) {
             const parts = text.split("|").map(s => s.trim());
             if (parts.length >= 2) {
-              specs.mileage = parts[0]; // "86.665 mi."
-              specs.registrationDate = parts[1]; // "24.06.2021"
+              specs.mileage = parts[0];
+              specs.registrationDate = parts[1];
             }
           }
-          // Combustibil și cutie: "Benzina | Manual" sau "Diesel | Automat"
           if (text.includes("Benzina") || text.includes("Diesel") || text.includes("Electric")) {
             const parts = text.split("|").map(s => s.trim());
             if (parts.length >= 2) {
@@ -185,18 +211,8 @@
               specs.fuel = text;
             }
           }
-          // Opțiuni
-          if (text.startsWith("Optiuni:")) {
-            specs.options = text.replace("Optiuni:", "").trim();
-          }
-          // Stoc
-          if (text.startsWith("Stoc:")) {
-            specs.stock = text.replace("Stoc:", "").trim();
-          }
         });
       }
-
-      // BCA - similar, dar cu clase diferite (poți adăuga mai târziu)
       return specs;
     } catch (e) {
       logError("extractVehicleSpecs:", e);
@@ -244,8 +260,6 @@
       registration_date: specs.registrationDate || "N/A",
       fuel: specs.fuel || "N/A",
       gearbox: specs.gearbox || "N/A",
-      options: specs.options || "N/A",
-      stock: specs.stock || "N/A",
     };
   }
 
@@ -335,6 +349,7 @@
             return;
           }
 
+          // ----- Folosește lastClickInfo.btn pentru a găsi cardul corect -----
           const payload = buildPayload(amount, "xhr-bid", lastClickInfo ? lastClickInfo.btn : null);
           sendToServer(payload);
         }
