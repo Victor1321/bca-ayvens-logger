@@ -162,21 +162,21 @@ app.post("/receive-bid", async (req, res) => {
   console.log("⚡ BID RECEIVED:", data);
 
   const baseMsg =
-`<b>🚨 LICITATIE NOUĂ</b>
+`<b>🚨 LICITATIE NOUA</b>
 
 👤 Angajat: <b>${data.client_id || "necunoscut"}</b>
 🚗 Titlu: <b>${data.item_title || ""}</b>
 💶 Suma: <b>${data.bid_amount} ${data.currency || "EUR"}</b>
 🔗 Link: ${data.item_link || ""}
-🕒 La: ${data.timestamp || ""}`;
-📏 Kilometraj: ${data.mileage || "N/A"}
-📅 Data înmatriculării: ${data.registration_date || "N/A"}
-⛽ Combustibil: ${data.fuel || "N/A"}
-⚙️ Cutie: ${data.gearbox || "N/A"}
+🕒 La: ${data.timestamp || ""}
+Kilometraj: ${data.mileage || "N/A"}
+Data inmatricularii: ${data.registration_date || "N/A"}
+Combustibil: ${data.fuel || "N/A"}
+Cutie: ${data.gearbox || "N/A"}`;
 
   // varianta originală (BCA) cu linia de imagine
   const msgWithImageLine = `${baseMsg}
-📸 Imagine: ${data.image_url || "N/A"}`;
+Imagine: ${data.image_url || "N/A"}`;
 
   const isAyvens =
     typeof data.item_link === "string" &&
@@ -184,7 +184,7 @@ app.post("/receive-bid", async (req, res) => {
 
   try {
     if (isAyvens && data.image_url) {
-      // AYVENS -> trimitem poza ca photo + caption (fără linia "📸 Imagine")
+      // AYVENS -> trimitem poza ca photo + caption (fără linia "Imagine")
       await sendPhotoToTelegram(data.image_url, baseMsg);
     } else {
       // BCA (sau fallback): păstrăm EXACT comportamentul vechi
