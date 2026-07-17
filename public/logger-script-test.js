@@ -1,12 +1,11 @@
 // -------------------------------------------------------------
-// LOGGER-SCRIPT - INTERCEPTEAZĂ REQUEST-URI BID (AYVENS + BCA)
-// VERSIUNEA FINALĂ – FUNCȚIONALĂ 100%
+// LOGGER-SCRIPT - VERSIUNEA FINALĂ (cu kilometraj și data)
 // -------------------------------------------------------------
 (function () {
   "use strict";
 
   const SERVER_URL = "https://bca-ayvens-logger.fly.dev/receive-bid";
-  const CLIENT_ID = "test"; // Schimbă după nevoie (ex: "Marian", "Ionel")
+  const CLIENT_ID = "test"; // Schimbă după nevoie
 
   const ALLOWED_HOSTS = [
     "ee.bca-europe.com",
@@ -49,7 +48,6 @@
     return BID_KEYWORDS.some(k => lower.includes(k));
   }
 
-  // ----- EXTRAGE NUMĂR DIN TEXT (fără prag minim) -----
   function extractNumber(text) {
     if (!text) return null;
     const cleaned = String(text).replace(/[^0-9.,]/g, "");
@@ -60,8 +58,8 @@
     return nr;
   }
 
-  // ----- EXTRAGE TITLUL (BCA + AYVENS) -----
-  function extractItemTitle() {
+  // ----- Extrage titlul -----
+  function extractItemTitle(btn) {
     try {
       const host = location.hostname.toLowerCase();
 
@@ -71,35 +69,48 @@
         return ["solicitați informații", "solicitati informatii", "request info", "request information"].includes(s);
       }
 
-      // AYVENS
       if (host.includes("ayvens")) {
+        let card = btn ? btn.closest(".card-body, .vehicle, .listing-item, .offer-item, article, .row") : null;
+        if (card) {
+          let h2 = card.querySelector("h2.vehicle-title");
+          if (h2) {
+            let txt = h2.textContent.trim().replace(/RECOMANDAT/g, "").trim();
+            if (txt && !isBadTitle(txt)) return txt;
+          }
+          let title = card.querySelector(".vehicle-title");
+          if (title) {
+            let txt = title.textContent.trim().replace(/RECOMANDAT/g, "").trim();
+            if (txt && !isBadTitle(txt)) return txt;
+          }
+        }
         let h2 = document.querySelector("h2.vehicle-title");
         if (h2) {
           let txt = h2.textContent.trim().replace(/RECOMANDAT/g, "").trim();
           if (txt && !isBadTitle(txt)) return txt;
         }
-        let firstCard = document.querySelector(".vehicle-title");
-        if (firstCard) {
-          let txt = firstCard.textContent.trim().replace(/RECOMANDAT/g, "").trim();
+      }
+
+      if (host.includes("bca-europe.com") || host.includes("bca-online-auctions.eu") || host.endsWith("bca.com")) {
+        let card = btn ? btn.closest(".viewlot, .lot, .auction-tile, article, section, div") : null;
+        if (card) {
+          let title = card.querySelector("h2.viewlot_headline, h1.viewlot_headline");
+          if (title) {
+            let txt = title.textContent.trim();
+            if (txt && !isBadTitle(txt)) return txt;
+          }
+        }
+        let bcaTitle = document.querySelector("h2.viewlot_headline.viewlotheadline--large, h1.viewlotheadline.viewlot_headline--large");
+        if (bcaTitle) {
+          let txt = bcaTitle.textContent.trim();
           if (txt && !isBadTitle(txt)) return txt;
         }
       }
 
-      // BCA
-      const bcaTitle = document.querySelector(
-        "h2.viewlot_headline.viewlotheadline--large, h1.viewlotheadline.viewlot_headline--large"
-      );
-      if (bcaTitle) {
-        const txt = bcaTitle.textContent.trim();
+      let h = document.querySelector("h1, h2, h3");
+      if (h) {
+        let txt = h.textContent.trim();
         if (txt && !isBadTitle(txt)) return txt;
       }
-
-      const fallback = document.querySelector("h1, h2, h3");
-      if (fallback) {
-        const txt = fallback.textContent.trim();
-        if (txt && !isBadTitle(txt)) return txt;
-      }
-
       return "Titlu indisponibil";
     } catch (e) {
       logError("extractItemTitle:", e);
@@ -107,26 +118,34 @@
     }
   }
 
-  // ----- EXTRAGE IMAGINEA (BCA + AYVENS) -----
-  function extractImageUrl() {
+  // ----- Extrage imaginea -----
+  function extractImageUrl(btn) {
     try {
       const host = location.hostname;
 
       if (host.includes("ayvens")) {
+        let card = btn ? btn.closest(".card-body, .vehicle, .listing-item, .offer-item, article, .row") : null;
+        if (card) {
+          let img = card.querySelector(".vehicle-picture img, img[id^='vehicle-default-picture']");
+          if (img && img.src) return img.src;
+        }
         let img = document.querySelector(".vehicle-picture img");
         if (img && img.src) return img.src;
-        let mainImg = document.querySelector(".MainImg");
-        if (mainImg && mainImg.src) return mainImg.src;
       }
 
       if (host.includes("bca-europe.com") || host.includes("bca-online-auctions.eu") || host.endsWith("bca.com")) {
+        let card = btn ? btn.closest(".viewlot, .lot, .auction-tile, article, section, div") : null;
+        if (card) {
+          let img = card.querySelector(".viewlot__img img.MainImg, .ImageA img");
+          if (img && img.src) return img.src;
+        }
         let img = document.querySelector(".viewlot__img img.MainImg");
         if (img && img.src) return img.src;
         img = document.querySelector(".ImageA img");
         if (img && img.src) return img.src;
       }
 
-      const anyImg = document.querySelector("img");
+      let anyImg = document.querySelector("img");
       if (anyImg && anyImg.src) return anyImg.src;
     } catch (e) {
       logError("extractImageUrl:", e);
@@ -134,7 +153,58 @@
     return null;
   }
 
-  // ----- TIMESTAMP (GMT+2) -----
+  // ----- Extrage specificațiile (kilometraj, data, etc.) -----
+  function extractVehicleSpecs(btn) {
+    try {
+      const host = location.hostname;
+      let specs = { mileage: null, registrationDate: null, fuel: null, gearbox: null, options: null, stock: null };
+
+      if (host.includes("ayvens")) {
+        let card = btn ? btn.closest(".card-body, .vehicle, .listing-item, .offer-item, article, .row") : null;
+        if (!card) return specs;
+
+        // Caută toate textele din vehicle-specifications-text
+        const textElements = card.querySelectorAll(".vehicle-specifications-text");
+        textElements.forEach(el => {
+          const text = el.textContent.trim();
+          // Kilometraj și data: format "86.665 mi. | 24.06.2021"
+          if (text.includes("mi.") && text.includes("|")) {
+            const parts = text.split("|").map(s => s.trim());
+            if (parts.length >= 2) {
+              specs.mileage = parts[0]; // "86.665 mi."
+              specs.registrationDate = parts[1]; // "24.06.2021"
+            }
+          }
+          // Combustibil și cutie: "Benzina | Manual" sau "Diesel | Automat"
+          if (text.includes("Benzina") || text.includes("Diesel") || text.includes("Electric")) {
+            const parts = text.split("|").map(s => s.trim());
+            if (parts.length >= 2) {
+              specs.fuel = parts[0];
+              specs.gearbox = parts[1];
+            } else {
+              specs.fuel = text;
+            }
+          }
+          // Opțiuni
+          if (text.startsWith("Optiuni:")) {
+            specs.options = text.replace("Optiuni:", "").trim();
+          }
+          // Stoc
+          if (text.startsWith("Stoc:")) {
+            specs.stock = text.replace("Stoc:", "").trim();
+          }
+        });
+      }
+
+      // BCA - similar, dar cu clase diferite (poți adăuga mai târziu)
+      return specs;
+    } catch (e) {
+      logError("extractVehicleSpecs:", e);
+      return {};
+    }
+  }
+
+  // ----- TIMESTAMP -----
   function timestamp() {
     const d = new Date(Date.now() + 2 * 3600000);
     return d.toISOString().replace("T", " ").replace("Z", "");
@@ -152,29 +222,37 @@
     return true;
   }
 
-  // ----- BUILD PAYLOAD -----
-  function buildPayload(amount, sourceTag) {
+  // ----- BUILD PAYLOAD (cu btn) -----
+  function buildPayload(amount, sourceTag, btn) {
     let itemLink = location.href;
     if (location.hostname.includes("ayvens")) {
       itemLink = "https://carmarket.ayvens.com/live";
     }
+
+    const specs = extractVehicleSpecs(btn);
+
     return {
       client_id: CLIENT_ID,
       item_link: itemLink,
-      item_title: extractItemTitle(),
+      item_title: extractItemTitle(btn),
       bid_amount: amount,
       currency: "EUR",
       timestamp: timestamp(),
       source: sourceTag,
-      image_url: extractImageUrl(),
+      image_url: extractImageUrl(btn),
+      mileage: specs.mileage || "N/A",
+      registration_date: specs.registrationDate || "N/A",
+      fuel: specs.fuel || "N/A",
+      gearbox: specs.gearbox || "N/A",
+      options: specs.options || "N/A",
+      stock: specs.stock || "N/A",
     };
   }
 
-  // ----- SEND TO SERVER -----
+  // ----- SEND -----
   function sendToServer(data) {
     if (!data || typeof data.bid_amount === "undefined" || data.bid_amount === null) return;
     if (!shouldSend(data.bid_amount, data.item_link)) return;
-
     logSend(data);
     fetch(SERVER_URL, {
       method: "POST",
@@ -186,7 +264,7 @@
   }
 
   // =========================================================
-  // INTERCEPTOR XHR (PENTRU AYVENS - /sale/bid/)
+  // INTERCEPTOR XHR (AYVENS - /sale/bid/)
   // =========================================================
   (function () {
     const origSend = XMLHttpRequest.prototype.send;
@@ -207,10 +285,8 @@
           this._url.includes('/sale/bid/')
         ) {
           console.log("[LOGGER] Interceptat /sale/bid/");
-
           let amount = null;
 
-          // ----- EXTRAGE SUMA DIRECT DIN JSON (câmpul "Amount") -----
           if (body && typeof body === "string") {
             try {
               const json = JSON.parse(body);
@@ -229,7 +305,6 @@
             } catch (e) {}
           }
 
-          // ----- FALLBACK: caută orice număr în body -----
           if (!amount) {
             let bodyText = "";
             if (typeof body === "string") bodyText = body;
@@ -240,7 +315,6 @@
             } else if (body && typeof body === "object") {
               try { bodyText = JSON.stringify(body); } catch (e) {}
             }
-
             if (bodyText) {
               const numbers = bodyText.match(/\d{2,}/g);
               if (numbers) {
@@ -261,8 +335,7 @@
             return;
           }
 
-          // ----- TRIMITE -----
-          const payload = buildPayload(amount, "xhr-bid");
+          const payload = buildPayload(amount, "xhr-bid", lastClickInfo ? lastClickInfo.btn : null);
           sendToServer(payload);
         }
       } catch (e) {
@@ -288,7 +361,6 @@
         ) {
           console.log("[LOGGER] Interceptat FETCH /sale/bid/");
           let amount = null;
-
           if (body) {
             try {
               const json = typeof body === "string" ? JSON.parse(body) : JSON.parse(JSON.stringify(body));
@@ -298,7 +370,6 @@
               }
             } catch (e) {}
           }
-
           if (!amount && body) {
             const bodyText = typeof body === "string" ? body : JSON.stringify(body);
             const numbers = bodyText.match(/\d{2,}/g);
@@ -313,9 +384,8 @@
               }
             }
           }
-
           if (amount) {
-            const payload = buildPayload(amount, "fetch-bid");
+            const payload = buildPayload(amount, "fetch-bid", lastClickInfo ? lastClickInfo.btn : null);
             sendToServer(payload);
           }
         }
@@ -329,7 +399,6 @@
   // =========================================================
   // LOGICA PENTRU BCA (CLICK + REQUEST INTERCEPTOR)
   // =========================================================
-  // ----- CLICK DETECTOR (BCA) -----
   document.addEventListener("click", function (e) {
     try {
       const btn = e.target && e.target.closest("button, a, input[type='submit']");
@@ -346,12 +415,11 @@
         sent: false,
       };
 
-      // Fallback după 1.5 sec (dacă nu s-a trimis automat)
       setTimeout(() => {
         if (lastClickInfo && !lastClickInfo.sent) {
           const fallbackAmount = lastClickInfo.domAmount || extractNumber(document.querySelector("input[type='text']")?.value || "");
           if (fallbackAmount) {
-            const payload = buildPayload(fallbackAmount, "fallback-click");
+            const payload = buildPayload(fallbackAmount, "fallback-click", btn);
             sendToServer(payload);
             lastClickInfo.sent = true;
           }
@@ -363,7 +431,7 @@
     }
   });
 
-  // ----- INTERCEPTOR XHR (pentru BCA) -----
+  // ----- INTERCEPTOR XHR (BCA) -----
   (function () {
     const origSend = XMLHttpRequest.prototype.send;
     const origOpen = XMLHttpRequest.prototype.open;
@@ -380,7 +448,7 @@
           this._method &&
           this._method.toUpperCase() === "POST" &&
           this._url &&
-          !this._url.includes('/sale/bid/') // Nu mai procesa Ayvens aici
+          !this._url.includes('/sale/bid/')
         ) {
           const sinceClick = lastClickInfo ? now() - lastClickInfo.time : null;
           if (lastClickInfo && sinceClick <= CLICK_WINDOW_MS) {
@@ -394,12 +462,11 @@
             } else if (body && typeof body === "object") {
               try { bodyText = JSON.stringify(body); } catch (e) {}
             }
-
             const haystack = (this._url + " " + bodyText).toLowerCase();
             if (textContainsKeyword(haystack)) {
               amount = extractNumber(bodyText) || lastClickInfo.domAmount;
               if (amount) {
-                const payload = buildPayload(amount, "xhr-bid-bca");
+                const payload = buildPayload(amount, "xhr-bid-bca", lastClickInfo.btn);
                 sendToServer(payload);
                 lastClickInfo.sent = true;
               }
@@ -413,7 +480,7 @@
     };
   })();
 
-  // ----- INTERCEPTOR FETCH (pentru BCA) -----
+  // ----- INTERCEPTOR FETCH (BCA) -----
   (function () {
     const origFetch = window.fetch;
     window.fetch = function (input, init) {
@@ -437,7 +504,7 @@
             if (textContainsKeyword(haystack)) {
               amount = extractNumber(bodyText) || lastClickInfo.domAmount;
               if (amount) {
-                const payload = buildPayload(amount, "fetch-bid-bca");
+                const payload = buildPayload(amount, "fetch-bid-bca", lastClickInfo.btn);
                 sendToServer(payload);
                 lastClickInfo.sent = true;
               }
