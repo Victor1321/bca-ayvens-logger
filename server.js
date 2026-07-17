@@ -169,6 +169,10 @@ app.post("/receive-bid", async (req, res) => {
 💶 Suma: <b>${data.bid_amount} ${data.currency || "EUR"}</b>
 🔗 Link: ${data.item_link || ""}
 🕒 La: ${data.timestamp || ""}`;
+📏 Kilometraj: ${data.mileage || "N/A"}
+📅 Data înmatriculării: ${data.registration_date || "N/A"}
+⛽ Combustibil: ${data.fuel || "N/A"}
+⚙️ Cutie: ${data.gearbox || "N/A"}
 
   // varianta originală (BCA) cu linia de imagine
   const msgWithImageLine = `${baseMsg}
