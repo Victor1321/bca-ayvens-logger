@@ -281,7 +281,7 @@
 
         if (HOME_HOSTS.includes(HOST)) {
             console.log("[AUTOLOGIN-BCA] Host homepage detectat:", HOST);
-            setTimeout(handleHome, 1000);
+            setTimeout(handleHome, 3000);
         } else if (LOGIN_HOSTS.includes(HOST)) {
             console.log("[AUTOLOGIN-BCA] Host login detectat:", HOST);
             setTimeout(handleLogin, 1000);
