@@ -5,7 +5,7 @@
   "use strict";
 
   const SERVER_URL = "https://bca-ayvens-logger.fly.dev/receive-bid";
-  const CLIENT_ID = "david-fleasca"; // Schimbă după nevoie
+  const CLIENT_ID = "ionescu-vladut"; // Schimbă după nevoie
 
   const ALLOWED_HOSTS = [
     "ee.bca-europe.com",
