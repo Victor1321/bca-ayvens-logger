@@ -7,7 +7,6 @@ app = 'bca-ayvens-logger'
 primary_region = 'ams'
 
 [build]
-  builder = "heroku/buildpacks:20"
   
 [http_service]
   internal_port = 8080
