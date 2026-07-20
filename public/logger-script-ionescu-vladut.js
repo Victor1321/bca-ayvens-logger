@@ -1,5 +1,5 @@
 // -------------------------------------------------------------
-// LOGGER-SCRIPT - VERSIUNEA COMPLETĂ (BCA + AYVENS)
+// LOGGER-SCRIPT - VERSIUNEA COMPLETĂ (BCA + AYVENS) refresh
 // -------------------------------------------------------------
 (function () {
   "use strict";
