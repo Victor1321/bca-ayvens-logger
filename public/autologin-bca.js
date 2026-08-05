@@ -5,6 +5,17 @@
 (function () {
     "use strict";
 
+    // ----- DEBUG: activ cu ?debug=1 în URL sau localStorage['autologin-debug']='1' -----
+    const DEBUG = (function () {
+        try { if (typeof localStorage !== "undefined" && localStorage.getItem("autologin-debug") === "1") return true; } catch (e) {}
+        try { if (window.location && String(window.location.search).includes("debug=1")) return true; } catch (e) {}
+        return false;
+    })();
+    const _origLog = console.log.bind(console);
+    function dlog(...args) {
+        if (DEBUG) _origLog("[AUTOLOGIN-BCA-DEBUG]", ...args);
+    }
+
     // unde dăm click pe „Autentificare”
     const HOME_HOSTS = [
         "www.bca.com",
@@ -94,14 +105,14 @@
 
         document.documentElement.appendChild(overlay);
 
-        console.log("[AUTOLOGIN-BCA] Overlay login afișat.");
+        dlog("[AUTOLOGIN-BCA] Overlay login afișat.");
     }
 
     function hideLoginOverlay() {
         const overlay = document.getElementById("bca-autologin-overlay");
         if (overlay) {
             overlay.remove();
-            console.log("[AUTOLOGIN-BCA] Overlay login ascuns.");
+            dlog("[AUTOLOGIN-BCA] Overlay login ascuns.");
         }
     }
 
@@ -112,9 +123,9 @@
         try {
             const btn = await waitFor("#onetrust-accept-btn-handler", 8000);
             btn.click();
-            console.log("[AUTOLOGIN-BCA] Am apăsat „Accept All Cookies”.");
+            dlog("[AUTOLOGIN-BCA] Am apăsat „Accept All Cookies”.");
         } catch (e) {
-            console.log("[AUTOLOGIN-BCA] Nu am găsit bannerul de cookies sau a expirat timeout-ul.");
+            dlog("[AUTOLOGIN-BCA] Nu am găsit bannerul de cookies sau a expirat timeout-ul.");
         }
     }
 
@@ -123,7 +134,7 @@
     // ---------------------------------------------------------
     function getCredentials() {
         return new Promise((resolve) => {
-            console.log("[AUTOLOGIN-BCA] Cer credențiale de la extensie (bridge)...");
+            dlog("[AUTOLOGIN-BCA] Cer credențiale de la extensie (bridge)...");
 
             function handler(event) {
                 if (event.source !== window) return;
@@ -131,7 +142,7 @@
                 if (data.type === "BCA_CREDS") {
                     window.removeEventListener("message", handler);
                     if (data.creds && data.creds.ok) {
-                        console.log("[AUTOLOGIN-BCA] Am primit credențiale de la extensie.");
+                        dlog("[AUTOLOGIN-BCA] Am primit credențiale de la extensie.");
                         resolve(data.creds);
                     } else {
                         console.error("[AUTOLOGIN-BCA] Credenziale invalide sau lipsă:", data.creds);
@@ -163,7 +174,7 @@
     // ---------------------------------------------------------
         async function handleHome() {
     try {
-        console.log("[AUTOLOGIN-BCA] Sunt pe homepage BCA, caut buton login...");
+        dlog("[AUTOLOGIN-BCA] Sunt pe homepage BCA, caut buton login...");
 
         // Găsește header-ul
         const header = document.querySelector('header.Header, header[class*="Header"]');
@@ -195,16 +206,20 @@
         }
 
         if (!loginSpan) {
-            throw new Error("Nu am găsit span-ul cu textul 'Autentificare'");
+            // nu există buton de login → ești deja logat sau pagina s-a schimbat; ieșim fără zgomot
+            dlog("Nu am găsit 'Autentificare' — probabil deja logat. Ies.");
+            return;
         }
 
         const loginBtn = loginSpan.closest('button');
         if (!loginBtn) {
-            throw new Error("Nu am găsit butonul părinte pentru span-ul 'Autentificare'");
+            dlog("Nu am găsit butonul părinte pentru span-ul 'Autentificare'.");
+            return;
         }
 
-        console.log("[AUTOLOGIN-BCA] Găsit butonul de Autentificare, dau click");
+        dlog("Găsit butonul de Autentificare, dau click");
         loginBtn.click();
+        console.log("[AUTOLOGIN] bca: click Autentificare");
     } catch (e) {
         console.error("[AUTOLOGIN-BCA] Eroare pe homepage:", e);
     }
@@ -215,7 +230,14 @@
     // ---------------------------------------------------------
     async function handleLogin() {
         try {
-            console.log("[AUTOLOGIN-BCA] Sunt pe login.bca.com, aștept formularul...");
+            dlog("Sunt pe login.bca.com, aștept formularul...");
+
+            // dacă nu există formular, ești deja logat/redirectat — ieși fără zgomot
+            const hasForm = document.querySelector("#username, input[name='username'], input[type='email'], #password, input[name='password'], input[type='password']");
+            if (!hasForm) {
+                dlog("Nu există formular de login — probabil deja logat. Ies.");
+                return;
+            }
 
             // overlay peste pagina de login
             showLoginOverlay();
@@ -230,7 +252,7 @@
                 15000
             );
 
-            console.log("[AUTOLOGIN-BCA] Formular login găsit, cer credențiale...");
+            dlog("[AUTOLOGIN-BCA] Formular login găsit, cer credențiale...");
 
             const creds = await getCredentials();
             if (!creds) {
@@ -242,7 +264,7 @@
             fillInput(userInput, creds.username);
             fillInput(passInput, creds.password);
 
-            console.log("[AUTOLOGIN-BCA] Date completate, caut buton submit...");
+            dlog("[AUTOLOGIN-BCA] Date completate, caut buton submit...");
 
             const submitBtn = await waitFor(
                 "#loginButton, button#loginButton, button[id='loginButton'], button[type='submit'], input[type='submit'], button.login, button[type='button'][name='login']",
@@ -256,10 +278,11 @@
             }
 
             submitBtn.click();
-            console.log("[AUTOLOGIN-BCA] Am apăsat Login, aștept redirect...");
+            console.log("[AUTOLOGIN] bca: creds filled+submitted");
+            dlog("Am apăsat Login, aștept redirect...");
 
             setTimeout(() => {
-                console.log("[AUTOLOGIN-BCA] Ascund overlay (timeout după login).");
+                dlog("[AUTOLOGIN-BCA] Ascund overlay (timeout după login).");
                 hideLoginOverlay();
             }, 8000);
 
@@ -273,20 +296,40 @@
     // PORNIREA SCRIPTULUI
     // =========================================================
 
+    function isLoggedIn() {
+        // markere de utilizator autentificat în header/pagină
+        try {
+            const markers = [
+                '[class*="logout"]', '[href*="logout"]', '[class*="Logout"]',
+                '[class*="account"]', '[class*="Account"]', '[class*="user-menu"]',
+                '[class*="avatar"]', '[class*="profile"]', '#userMenu', '[data-testid*="user"]',
+            ];
+            if (document.querySelector(markers.join(","))) return true;
+        } catch (e) {}
+        return false;
+    }
+
     function init() {
+        // pornește o singură dată per pagină
+        if (window.__bcaAutologinStarted) return;
+        window.__bcaAutologinStarted = true;
+
+        if (isLoggedIn()) {
+            dlog("Deja logat, ies fără zgomot.");
+            return;
+        }
+
         // încerci să accepți cookies pe ambele host-uri (homepage + login)
         if (HOME_HOSTS.includes(HOST) || LOGIN_HOSTS.includes(HOST)) {
             acceptBcaCookies();
         }
 
         if (HOME_HOSTS.includes(HOST)) {
-            console.log("[AUTOLOGIN-BCA] Host homepage detectat:", HOST);
+            dlog("Host homepage detectat:", HOST);
             setTimeout(handleHome, 3000);
         } else if (LOGIN_HOSTS.includes(HOST)) {
-            console.log("[AUTOLOGIN-BCA] Host login detectat:", HOST);
+            dlog("Host login detectat:", HOST);
             setTimeout(handleLogin, 1000);
-        } else {
-            // alt host, nu facem nimic
         }
     }
 

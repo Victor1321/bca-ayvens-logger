@@ -6,6 +6,23 @@
 
   const SERVER_URL = "https://bca-ayvens-logger.fly.dev/receive-bid";
   const CLIENT_ID = "filip-ionut"; // Schimbă după nevoie
+  const VERSION = "3.1.0";
+
+  // ----- DEBUG: activ cu ?debug=1 în URL sau localStorage['logger-debug']='1' -----
+  const DEBUG = (function () {
+    try {
+      if (typeof localStorage !== "undefined" && localStorage.getItem("logger-debug") === "1") return true;
+    } catch (e) {}
+    try {
+      if (typeof window !== "undefined" && window.location && String(window.location.search).includes("debug=1")) return true;
+    } catch (e) {}
+    return false;
+  })();
+
+  const _origLog = console.log.bind(console);
+  function dlog(...args) {
+    if (DEBUG) _origLog("[LOGGER-DEBUG]", ...args);
+  }
 
   const ALLOWED_HOSTS = [
     "ee.bca-europe.com",
@@ -17,10 +34,47 @@
   ];
 
   const BID_KEYWORDS = [
-    "bid", "licit", "liciteaz", "offer", "oferta", "ofertă",
+    // EN / RO
+    "bid", "bids", "bidding", "licit", "liciteaz", "offer", "oferta", "ofertă",
     "place", "submit", "confirm", "confirmă", "confirma",
     "new offer", "oferta noua", "ofertă nouă", "oferta noua",
-    "licitează", "bid now", "buy now"
+    "licitează", "bid now", "buy now", "place bid",
+    // SK (slovacă)
+    "ponuka", "ponúk", "dražba", "odoslať", "odoslat", "potvrdiť", "potvrdit",
+    "cenová ponuka", "pridať ponuku", "pridat ponuku", "licitovať", "licitovat",
+    // CS (cehă)
+    "nabídka", "nabidka", "nabídnout", "nabidnout", "dražba", "dražbě",
+    "přihodit", "prihodit", "příhoz", "prihoz", "odeslat",
+    // HU (maghiară)
+    "ajánlat", "ajanlat", "licitál", "licital", "ajánlatot", "elküld", "megerősít", "megerosít", "árverés", "arveres",
+    // DE (germană)
+    "gebot", "bieten", "ersteigern", "auktion", "abgeben", "bestätigen", "bestaetigen", "kaufen", "senden",
+    // PL (poloneză)
+    "licytuj", "licytac", "licytacja", "złóż", "zloz", "potwierdź", "potwierdz", "wyślij", "wyslij", "kup",
+    // ES (spaniolă)
+    "puja", "pujar", "licitar", "enviar", "confirmar", "comprar", "pujar ahora",
+    // IT (italiană)
+    "offerta", "fai un'offerta", "fai un offerta", "rilancio", "invia", "conferma", "compra",
+    // FR (franceză)
+    "enchérir", "enchere", "offre", "soumettre", "confirmer", "acheter",
+    // NL (olandeză)
+    "bod", "bieden", "aanbieding", "verstuur", "bevestig", "koop", "bieding",
+    // PT (portugheză)
+    "licitar", "lance", "enviar", "confirmar", "comprar",
+    // TR (turcă)
+    "teklif", "teklif ver", "onayla", "gönder", "gonder", "satın al", "satin al",
+  ];
+
+  // pattern-uri de endpoint (independente de limba UI — URL-urile rămân în engleză)
+  const BID_URL_PATTERNS = [
+    "/sale/bid/", "/bid", "/offer", "/placebid", "/place-bid", "/submitbid", "/submit-bid",
+    "/proxy", "/lot", "/auction", "/createbid", "/makebid", "bidding", "placebid",
+  ];
+
+  // cuvinte pentru ID/name/data-*/aria-label (fără slash)
+  const BID_ID_KEYWORDS = [
+    "bid", "offer", "submit", "place", "confirm", "licit", "puja", "gebot",
+    "nabid", "ajánlat", "teklif", "ponuka", "enchere", "bod",
   ];
 
   const CLICK_WINDOW_MS = 5000;
@@ -43,7 +97,7 @@
   }
 
   function logSend(...args) {
-    console.log("[LOGGER] Trimis:", ...args);
+    dlog("[LOGGER] Trimis:", ...args);
   }
 
   function textContainsKeyword(text) {
@@ -60,6 +114,39 @@
     const nr = parseFloat(std);
     if (isNaN(nr) || nr < 1 || nr > 500000) return null;
     return nr;
+  }
+
+  // ----- Detecție bid independentă de limbă -----
+  function isBidElement(btn) {
+    if (!btn) return false;
+    let extra = "";
+    try {
+      if (btn.getAttribute) {
+        extra = [
+          btn.getAttribute("aria-label"),
+          btn.getAttribute("name"),
+          btn.getAttribute("data-bid"),
+          btn.getAttribute("data-action"),
+          btn.getAttribute("data-role"),
+          btn.getAttribute("title"),
+        ].filter(Boolean).join(" ").toLowerCase();
+      }
+    } catch (e) {}
+    const id = (btn.id || "").toLowerCase();
+    const combined = id + " " + extra;
+    return BID_ID_KEYWORDS.some(k => combined.includes(k));
+  }
+
+  function isBidRequest(url, bodyText, amount) {
+    const haystack = ((url || "") + " " + (bodyText || "")).toLowerCase();
+    if (textContainsKeyword(haystack)) return true;
+    if (BID_URL_PATTERNS.some(p => haystack.includes(p))) return true;
+    // semnal numeric: sumă plauzibilă + măcar un indiciu de bid în request
+    if (amount && amount > 0) {
+      const hints = ["€", "eur", "amount", "price", "currency", "value", "bid", "offer"];
+      if (hints.some(h => haystack.includes(h))) return true;
+    }
+    return false;
   }
 
   // ----- Găsește cardul părinte (pentru Ayvens) -----
@@ -146,7 +233,7 @@
           if (label.includes('Data primei înregistrări') || label.includes('Data primei inregistrari')) {
             const date = cells[1].textContent.trim();
             if (date) {
-              console.log("[LOGGER] Data primei înmatriculări (tabel):", date);
+              dlog("[LOGGER] Data primei înmatriculări (tabel):", date);
               return date;
             }
           }
@@ -264,7 +351,7 @@
       const imgId = `vehicle-default-picture-vehicle-${vehicleSaleId}`;
       const img = document.getElementById(imgId);
       if (img && img.src) {
-        console.log("[LOGGER] Imagine găsită după ID:", imgId);
+        dlog("[LOGGER] Imagine găsită după ID:", imgId);
         return img.src;
       }
       const card = document.querySelector(`[data-vehicle-id="${vehicleSaleId}"]`);
@@ -345,8 +432,7 @@
 
   // ----- TIMESTAMP -----
   function timestamp() {
-    const d = new Date(Date.now() + 2 * 3600000);
-    return d.toISOString().replace("T", " ").replace("Z", "");
+    return new Date().toISOString(); // UTC — serverul afișează în Europe/Bucharest
   }
 
   // ----- DEDUP -----
@@ -418,6 +504,7 @@
       currency: "EUR",
       timestamp: timestamp(),
       source: sourceTag,
+      host: location.hostname,
       image_url: imageUrl,
       mileage: mileage || "N/A",
       registration_date: registrationDate || "N/A",
@@ -431,6 +518,7 @@
     if (!data || typeof data.bid_amount === "undefined" || data.bid_amount === null) return;
     if (!shouldSend(data.bid_amount, data.item_link)) return;
     logSend(data);
+    console.log("[BID] trimis " + CLIENT_ID + " | " + data.bid_amount + " " + (data.currency || "EUR") + " | " + (data.source || "?") + " | " + (data.host || ""));
     fetch(SERVER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -461,7 +549,7 @@
           this._url &&
           this._url.includes('/sale/bid/')
         ) {
-          console.log("[LOGGER] Interceptat /sale/bid/");
+          dlog("[LOGGER] Interceptat /sale/bid/");
 
           let amount = null;
           let vehicleSaleId = null;
@@ -473,11 +561,11 @@
               const json = JSON.parse(body);
               if (json.Amount !== undefined && json.Amount !== null) {
                 amount = parseInt(json.Amount);
-                console.log("[LOGGER] Suma extrasă din json.Amount:", amount);
+                dlog("[LOGGER] Suma extrasă din json.Amount:", amount);
               }
               if (json.VehicleSale !== undefined) {
                 vehicleSaleId = json.VehicleSale;
-                console.log("[LOGGER] VehicleSale extras:", vehicleSaleId);
+                dlog("[LOGGER] VehicleSale extras:", vehicleSaleId);
               }
             } catch (e) {}
           } else if (body && typeof body === "object") {
@@ -485,11 +573,11 @@
               const json = JSON.parse(JSON.stringify(body));
               if (json.Amount !== undefined && json.Amount !== null) {
                 amount = parseInt(json.Amount);
-                console.log("[LOGGER] Suma extrasă din json.Amount (object):", amount);
+                dlog("[LOGGER] Suma extrasă din json.Amount (object):", amount);
               }
               if (json.VehicleSale !== undefined) {
                 vehicleSaleId = json.VehicleSale;
-                console.log("[LOGGER] VehicleSale extras (object):", vehicleSaleId);
+                dlog("[LOGGER] VehicleSale extras (object):", vehicleSaleId);
               }
             } catch (e) {}
           }
@@ -501,7 +589,7 @@
                 const val = parseInt(num);
                 if (val > 10 && val < 500000) {
                   amount = val;
-                  console.log("[LOGGER] Suma extrasă din body (fallback):", amount);
+                  dlog("[LOGGER] Suma extrasă din body (fallback):", amount);
                   break;
                 }
               }
@@ -509,17 +597,17 @@
           }
 
           if (!amount) {
-            console.log("[LOGGER] Nu am găsit suma în request!");
+            dlog("[LOGGER] Nu am găsit suma în request!");
             return;
           }
 
           let card = null;
           if (vehicleSaleId) {
-            console.log("[LOGGER] Caut card cu VehicleSale ID:", vehicleSaleId);
+            dlog("[LOGGER] Caut card cu VehicleSale ID:", vehicleSaleId);
             const vehicleEl = document.querySelector(`[data-vehicle-id="${vehicleSaleId}"]`);
             if (vehicleEl) {
               card = vehicleEl.closest('.card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card');
-              console.log("[LOGGER] Card găsit prin data-vehicle-id:", card);
+              dlog("[LOGGER] Card găsit prin data-vehicle-id:", card);
             }
             if (!card) {
               const allElements = document.querySelectorAll('[data-bid-area-information]');
@@ -529,7 +617,7 @@
                   const data = JSON.parse(attr);
                   if (data.VehicleId == vehicleSaleId || data.SaleConditionId == vehicleSaleId) {
                     card = el.closest('.card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card');
-                    console.log("[LOGGER] Card găsit prin data-bid-area-information:", card);
+                    dlog("[LOGGER] Card găsit prin data-bid-area-information:", card);
                     break;
                   }
                 } catch (e) {}
@@ -539,20 +627,20 @@
               const saleEl = document.querySelector(`[data-sale-id="${vehicleSaleId}"]`);
               if (saleEl) {
                 card = saleEl.closest('.card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card');
-                console.log("[LOGGER] Card găsit prin data-sale-id:", card);
+                dlog("[LOGGER] Card găsit prin data-sale-id:", card);
               }
             }
           }
 
           if (!card) {
-            console.log("[LOGGER] Nu am găsit card prin ID, folosesc fallback global.");
+            dlog("[LOGGER] Nu am găsit card prin ID, folosesc fallback global.");
             const inputs = document.querySelectorAll('.bid-offer-input');
             for (const inp of inputs) {
               if (inp.value && inp.value.trim() !== '') {
                 const parentCard = inp.closest('.card-body, .vehicle, .listing-item, .offer-item, article, .row, .col-lg-9, .card');
                 if (parentCard) {
                   card = parentCard;
-                  console.log("[LOGGER] Card găsit prin fallback (input):", card);
+                  dlog("[LOGGER] Card găsit prin fallback (input):", card);
                   break;
                 }
               }
@@ -575,6 +663,7 @@
             currency: "EUR",
             timestamp: timestamp(),
             source: "xhr-bid",
+            host: location.hostname,
             image_url: imageUrl,
             mileage: card ? extractMileageFromCard(card) : "N/A",
             registration_date: card ? extractRegistrationDateFromCard(card) : "N/A",
@@ -599,16 +688,33 @@
       const btn = e.target && e.target.closest("button, a, input[type='submit']");
       if (!btn) return;
       const txt = (btn.innerText || btn.value || "").trim();
-      if (!textContainsKeyword(txt)) return;
+      const labelTxt = (btn.getAttribute && (btn.getAttribute("aria-label") || btn.getAttribute("name") || btn.getAttribute("data-bid") || btn.getAttribute("data-action") || btn.getAttribute("title"))) || "";
+      const isBidBtn = textContainsKeyword(txt) || (labelTxt && textContainsKeyword(labelTxt)) || isBidElement(btn);
+      if (!isBidBtn) return;
+
+      const card = findParentCard(btn);
 
       let amount = null;
-      const inputs = document.querySelectorAll("input[type='text']");
+      const inputs = document.querySelectorAll("input[type='text'], input[type='number']");
       for (const inp of inputs) {
         if (inp.value && inp.value.includes('€')) {
           const nr = extractNumber(inp.value);
           if (nr) {
             amount = nr;
             break;
+          }
+        }
+      }
+      // fallback: input cu € în cardul butonului (UI în altă limbă, text necunoscut)
+      if (!amount && card) {
+        const cardInputs = card.querySelectorAll("input[type='text'], input[type='number']");
+        for (const inp of cardInputs) {
+          if (inp.value && inp.value.includes('€')) {
+            const nr = extractNumber(inp.value);
+            if (nr) {
+              amount = nr;
+              break;
+            }
           }
         }
       }
@@ -667,9 +773,8 @@
             } else if (body && typeof body === "object") {
               try { bodyText = JSON.stringify(body); } catch (e) {}
             }
-            const haystack = (this._url + " " + bodyText).toLowerCase();
-            if (textContainsKeyword(haystack)) {
-              amount = extractNumber(bodyText) || lastClickInfo.domAmount;
+            amount = extractNumber(bodyText) || lastClickInfo.domAmount;
+            if (isBidRequest(this._url, bodyText, amount)) {
               if (amount) {
                 const payload = buildPayload(amount, "xhr-bid-bca", lastClickInfo.btn);
                 sendToServer(payload);
@@ -705,9 +810,8 @@
             else if (body && typeof body === "object") {
               try { bodyText = JSON.stringify(body); } catch (e) {}
             }
-            const haystack = (url + " " + bodyText).toLowerCase();
-            if (textContainsKeyword(haystack)) {
-              amount = extractNumber(bodyText) || lastClickInfo.domAmount;
+            amount = extractNumber(bodyText) || lastClickInfo.domAmount;
+            if (isBidRequest(url, bodyText, amount)) {
               if (amount) {
                 const payload = buildPayload(amount, "fetch-bid-bca", lastClickInfo.btn);
                 sendToServer(payload);
@@ -728,7 +832,7 @@
   // LOGICA PENTRU idp.bca-online-auctions.eu (PROXY BIDDING)
   // =========================================================
   if (location.hostname.includes("idp.bca-online-auctions.eu")) {
-    console.log("[LOGGER] Mod Proxy Bidding activat pe", location.hostname);
+    dlog("[LOGGER] Mod Proxy Bidding activat pe", location.hostname);
 
     function extractIdpTitle() {
       try {
@@ -845,6 +949,7 @@
         currency: "EUR",
         timestamp: timestamp(),
         source: sourceTag,
+        host: location.hostname,
         image_url: extractIdpImage(),
         mileage: extractIdpMileage(),
         registration_date: extractIdpRegistrationDate(),
@@ -866,17 +971,17 @@
 
         const input = document.getElementById("proxyBidValue");
         if (!input) {
-          console.log("[LOGGER] Nu am găsit inputul #proxyBidValue");
+          dlog("[LOGGER] Nu am găsit inputul #proxyBidValue");
           return;
         }
 
         const amount = extractNumber(input.value);
         if (!amount) {
-          console.log("[LOGGER] Suma invalidă:", input.value);
+          dlog("[LOGGER] Suma invalidă:", input.value);
           return;
         }
 
-        console.log("[LOGGER] Proxy Bid detectat! Suma:", amount);
+        dlog("[LOGGER] Proxy Bid detectat! Suma:", amount);
 
         const payload = buildIdpPayload(amount, "idp-proxy-bid");
         sendToServer(payload);
@@ -904,7 +1009,7 @@
             this._url &&
             (this._url.includes('proxy') || this._url.includes('bid') || this._url.includes('offer'))
           ) {
-            console.log("[LOGGER] Interceptat request proxy bid:", this._url);
+            dlog("[LOGGER] Interceptat request proxy bid:", this._url);
 
             let amount = null;
             let bodyText = "";
@@ -924,7 +1029,7 @@
                   const val = parseInt(num);
                   if (val > 10 && val < 500000) {
                     amount = val;
-                    console.log("[LOGGER] Suma extrasă din request body:", amount);
+                    dlog("[LOGGER] Suma extrasă din request body:", amount);
                     break;
                   }
                 }
@@ -943,18 +1048,17 @@
       };
     })();
 
-    console.log("[LOGGER] Proxy Bidding activat pentru idp.bca-online-auctions.eu");
+    dlog("[LOGGER] Proxy Bidding activat pentru idp.bca-online-auctions.eu");
   }
 
   // =========================================================
   // PORNIRE
   // =========================================================
   if (!isAllowedHost()) {
-    console.log("[LOGGER] Host nepermis:", location.hostname);
+    dlog("[LOGGER] Host nepermis:", location.hostname);
     return;
   }
 
-  console.log("[LOGGER] Activ pe", location.hostname);
-  console.log("[LOGGER] CLIENT_ID:", CLIENT_ID);
+  dlog("[LOGGER] v" + VERSION + " activ pe", location.hostname, "client:", CLIENT_ID, DEBUG ? "(debug ON)" : "");
 
 })();
