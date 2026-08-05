@@ -136,17 +136,27 @@
         return new Promise((resolve) => {
             dlog("[AUTOLOGIN-BCA] Cer credențiale de la extensie (bridge)...");
 
+            let done = false;
+            let timer = null;
+
+            function finish(val) {
+                if (done) return;
+                done = true;
+                if (timer) clearTimeout(timer);
+                window.removeEventListener("message", handler);
+                resolve(val);
+            }
+
             function handler(event) {
                 if (event.source !== window) return;
                 const data = event.data || {};
                 if (data.type === "BCA_CREDS") {
-                    window.removeEventListener("message", handler);
                     if (data.creds && data.creds.ok) {
                         dlog("[AUTOLOGIN-BCA] Am primit credențiale de la extensie.");
-                        resolve(data.creds);
+                        finish(data.creds);
                     } else {
                         console.error("[AUTOLOGIN-BCA] Credenziale invalide sau lipsă:", data.creds);
-                        resolve(null);
+                        finish(null);
                     }
                 }
             }
@@ -155,6 +165,12 @@
 
             // declanșează cererea către content-script (extensie)
             window.postMessage({ type: "BCA_GET_CREDS" }, "*");
+
+            // dacă extensia nu răspunde, nu blocăm pagina la nesfârșit
+            timer = setTimeout(() => {
+                console.error("[AUTOLOGIN-BCA] Nu am primit răspuns de la extensie (timeout 8s). Verifică extensia.");
+                finish(null);
+            }, 8000);
         });
     }
 
@@ -232,9 +248,12 @@
         try {
             dlog("Sunt pe login.bca.com, aștept formularul...");
 
-            // dacă nu există formular, ești deja logat/redirectat — ieși fără zgomot
-            const hasForm = document.querySelector("#username, input[name='username'], input[type='email'], #password, input[name='password'], input[type='password']");
-            if (!hasForm) {
+            // pagina e AngularJS: formularul se randează după încărcare → îl AȘTEPTĂM,
+            // nu verificăm o singură dată. Dacă nu apare în 15s → ești deja logat/redirectat → ieși fără zgomot.
+            const FORM_SELECTOR = "#username, input[name='username'], input[type='email'], #password, input[name='password'], input[type='password']";
+            try {
+                await waitFor(FORM_SELECTOR, 15000);
+            } catch (e) {
                 dlog("Nu există formular de login — probabil deja logat. Ies.");
                 return;
             }
@@ -266,10 +285,22 @@
 
             dlog("[AUTOLOGIN-BCA] Date completate, caut buton submit...");
 
-            const submitBtn = await waitFor(
-                "#loginButton, button#loginButton, button[id='loginButton'], button[type='submit'], input[type='submit'], button.login, button[type='button'][name='login']",
+            let submitBtn = await waitFor(
+                "#loginButton, button#loginButton, button[id='loginButton'], button[type='submit'], input[type='submit'], button.login, button[type='button'][name='login'], [ng-click*='login'], [ng-click*='signin'], [ng-click*='submit']",
                 15000
-            );
+            ).catch(() => null);
+
+            // fallback: orice buton cu text de login (alte limbi / Angular)
+            if (!submitBtn) {
+                const candidates = document.querySelectorAll("button, input[type='button'], input[type='submit']");
+                for (const el of candidates) {
+                    const t = (el.innerText || el.value || "").trim().toLowerCase();
+                    if (/sign\s?in|log\s?in|login|continue|autentific|conecteaz/.test(t)) {
+                        submitBtn = el;
+                        break;
+                    }
+                }
+            }
 
             if (!submitBtn) {
                 console.error("[AUTOLOGIN-BCA] Nu am găsit buton submit");
@@ -299,10 +330,11 @@
     function isLoggedIn() {
         // markere de utilizator autentificat în header/pagină
         try {
+            // markeri TARI de autentificare (fără "account"/"profile" — false-positive pe link-uri „Creează cont")
             const markers = [
                 '[class*="logout"]', '[href*="logout"]', '[class*="Logout"]',
-                '[class*="account"]', '[class*="Account"]', '[class*="user-menu"]',
-                '[class*="avatar"]', '[class*="profile"]', '#userMenu', '[data-testid*="user"]',
+                '#userMenu', '[class*="user-menu"]', '[class*="userMenu"]',
+                '[class*="avatar"]', '[data-testid*="user"]',
             ];
             if (document.querySelector(markers.join(","))) return true;
         } catch (e) {}
@@ -314,7 +346,9 @@
         if (window.__bcaAutologinStarted) return;
         window.__bcaAutologinStarted = true;
 
-        if (isLoggedIn()) {
+        // pe homepage verificăm dacă ești deja logat (markeri tari);
+        // pe login.bca.com NU ne bazăm pe markeri — formularul decide (așteptat cu waitFor)
+        if (HOME_HOSTS.includes(HOST) && isLoggedIn()) {
             dlog("Deja logat, ies fără zgomot.");
             return;
         }
