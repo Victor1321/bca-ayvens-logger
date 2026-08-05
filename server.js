@@ -4,6 +4,7 @@
 // ======================================================
 
 const path = require("path");
+const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 
@@ -23,14 +24,8 @@ app.use(cors());
 // ------------------------------------------------------
 const publicDir = path.join(__dirname, "public");
 
-app.use(
-  "/public",
-  (req, res, next) => {
-    console.log("[STATIC] Request /public:", req.path);
-    next();
-  },
-  express.static(publicDir)
-);
+// fără log la fiecare request static — era cel mai mare zgomot din Grafana
+app.use("/public", express.static(publicDir));
 
 // ------------------------------------------------------
 // ENV (setezi in Railway -> Variables)
@@ -56,16 +51,69 @@ if (!AYVENS_USERNAME || !AYVENS_PASSWORD) {
 }
 
 // ------------------------------------------------------
+// DEBUG LOGGING (Grafana)
+// LOG_DEBUG=1  -> loguri verbose (payload-uri, răspunsuri Telegram)
+// LOG_FILE=... -> scrie și în fișier local. ATENȚIE: pe Fly.io discul e EFEMER,
+//                 fișierul dispare la redeploy/restart; se citește cu `fly ssh console`.
+//                 Grafana (stdout) rămâne sursa principală.
+// ------------------------------------------------------
+const LOG_DEBUG = process.env.LOG_DEBUG === "1" || process.env.LOG_DEBUG === "true";
+const LOG_FILE = process.env.LOG_FILE ? path.join(__dirname, process.env.LOG_FILE) : null;
+
+function writeLogFile(line) {
+  if (!LOG_FILE) return;
+  try {
+    if (fs.existsSync(LOG_FILE) && fs.statSync(LOG_FILE).size > 5 * 1024 * 1024) {
+      fs.writeFileSync(LOG_FILE, `# debug.log resetat ${new Date().toISOString()}\n`);
+    }
+    fs.appendFileSync(LOG_FILE, line + "\n");
+  } catch (e) {
+    /* fișierul e doar opțional */
+  }
+}
+
+function logLine(line) {
+  console.log(line);
+  writeLogFile(line);
+}
+
+// Ora afișată în mesajul Telegram: Europe/Bucharest (EET iarna / EEST vara).
+// Clienții noi trimit ISO UTC (cu Z) -> formatăm corect. Clienții vechi trimit
+// "YYYY-MM-DD HH:mm:ss" fără marker de fus -> îi păstrăm ca atare.
+function formatBucharest(ts) {
+  try {
+    if (!ts) {
+      return new Date().toLocaleString("ro-RO", { timeZone: "Europe/Bucharest", hour12: false });
+    }
+    if (typeof ts === "string" && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(ts)) {
+      return ts;
+    }
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return String(ts);
+    return new Intl.DateTimeFormat("ro-RO", {
+      timeZone: "Europe/Bucharest",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      hour12: false,
+    }).format(d);
+  } catch (e) {
+    return String(ts || "");
+  }
+}
+
+// ------------------------------------------------------
 // TRIMITERE MESAJ TEXT PE TELEGRAM
 // ------------------------------------------------------
 async function sendToTelegram(message) {
   try {
     const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
 
-    console.log("[SEND] Trimit mesaj text catre Telegram...");
-    console.log("[DEBUG] URL:", url);
-    console.log("[DEBUG] Chat ID:", TELEGRAM_CHAT_ID);
-    console.log("[DEBUG] Mesaj (primii 100 caractere):", message.substring(0, 100));
+    if (LOG_DEBUG) {
+      console.log("[SEND] Trimit mesaj text catre Telegram...");
+      console.log("[DEBUG] URL:", url);
+      console.log("[DEBUG] Chat ID:", TELEGRAM_CHAT_ID);
+      console.log("[DEBUG] Mesaj (primii 100 caractere):", message.substring(0, 100));
+    }
 
     const response = await fetch(url, {
       method: "POST",
@@ -78,15 +126,15 @@ async function sendToTelegram(message) {
     });
 
     const responseData = await response.json();
-    console.log("[RESPONSE] Raspuns Telegram (text):", responseData);
+    if (LOG_DEBUG) console.log("[RESPONSE] Raspuns Telegram (text):", responseData);
 
     if (!response.ok) {
       console.error("ERROR Telegram (text):", responseData);
-    } else {
-      console.log("SUCCESS: Mesaj text trimis cu succes!");
     }
+    return { ok: response.ok, status: response.status, data: responseData };
   } catch (err) {
     console.error("ERROR Telegram (sendMessage):", err);
+    throw err;
   }
 }
 
@@ -97,11 +145,13 @@ async function sendPhotoToTelegram(photoUrl, caption) {
   try {
     const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`;
 
-    console.log("[SEND] Trimit poza catre Telegram...");
-    console.log("[DEBUG] URL:", url);
-    console.log("[DEBUG] Chat ID:", TELEGRAM_CHAT_ID);
-    console.log("[DEBUG] Photo URL:", photoUrl);
-    console.log("[DEBUG] Caption (primii 100 caractere):", caption.substring(0, 100));
+    if (LOG_DEBUG) {
+      console.log("[SEND] Trimit poza catre Telegram...");
+      console.log("[DEBUG] URL:", url);
+      console.log("[DEBUG] Chat ID:", TELEGRAM_CHAT_ID);
+      console.log("[DEBUG] Photo URL:", photoUrl);
+      console.log("[DEBUG] Caption (primii 100 caractere):", caption.substring(0, 100));
+    }
 
     const response = await fetch(url, {
       method: "POST",
@@ -115,15 +165,15 @@ async function sendPhotoToTelegram(photoUrl, caption) {
     });
 
     const responseData = await response.json();
-    console.log("[RESPONSE] Raspuns Telegram (photo):", responseData);
+    if (LOG_DEBUG) console.log("[RESPONSE] Raspuns Telegram (photo):", responseData);
 
     if (!response.ok) {
       console.error("ERROR Telegram (photo):", responseData);
-    } else {
-      console.log("SUCCESS: Poza trimisa cu succes!");
     }
+    return { ok: response.ok, status: response.status, data: responseData };
   } catch (err) {
     console.error("ERROR Telegram (sendPhoto):", err);
+    throw err;
   }
 }
 
@@ -158,39 +208,52 @@ app.post("/auto-login-ayvens", (req, res) => {
 // ------------------------------------------------------
 app.post("/receive-bid", async (req, res) => {
   const data = req.body || {};
+  const client = data.client_id || "unknown";
+  const amount = data.bid_amount;
 
-  console.log("[BID] BID RECEIVED:", data);
+  // ---- log compact, lizibil în Grafana (3 linii per bid + rezultat + linie goală) ----
+  logLine(`[BID] ${client} | ${amount} ${data.currency || "EUR"} | ${data.source || "?"} | ${data.host || ""}`);
+  logLine(`${data.item_title || ""} | ${data.mileage || "N/A"} | ${data.registration_date || "N/A"} | ${data.fuel || "N/A"} | ${data.gearbox || "N/A"}`);
+  logLine(`${data.item_link || ""}`);
+  if (LOG_DEBUG) logLine("[BID-DETAIL] raw=" + JSON.stringify(data));
 
   const baseMsg =
 `<b>LICITATIE NOUA</b>
 
-Angajat: <b>${data.client_id || "necunoscut"}</b>
+Angajat: <b>${client}</b>
 Titlu: <b>${data.item_title || ""}</b>
-Suma: <b>${data.bid_amount} ${data.currency || "EUR"}</b>
+Suma: <b>${amount} ${data.currency || "EUR"}</b>
 Link: ${data.item_link || ""}
-La: ${data.timestamp || new Date().toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+La: ${formatBucharest(data.timestamp)}
 Kilometraj: ${data.mileage || "N/A"}
 Prima inregistrare: ${data.registration_date || "N/A"}
 Combustibil: ${data.fuel || "N/A"}
 Cutie: ${data.gearbox || "N/A"}`;
 
+  let result = null;
   try {
     // Daca exista image_url, trimite poza (atât pentru BCA, cat si pentru Ayvens)
-    if (data.image_url) {
-      await sendPhotoToTelegram(data.image_url, baseMsg);
-    } else {
-      // Daca nu exista imagine, trimite text
-      await sendToTelegram(baseMsg);
-    }
+    result = data.image_url
+      ? await sendPhotoToTelegram(data.image_url, baseMsg)
+      : await sendToTelegram(baseMsg);
   } catch (e) {
-    console.error("ERROR la trimiterea bid-ului la Telegram:", e);
+    logLine(`[BID] ${client} -> trimitere foto/text a eșuat: ${e && e.message ? e.message : e}`);
     // Fallback: incearca text daca poza a esuat
     try {
-      await sendToTelegram(baseMsg);
+      result = await sendToTelegram(baseMsg);
     } catch (e2) {
-      console.error("ERROR si fallback-ul text a esuat:", e2);
+      logLine(`[BID] ${client} -> si fallback-ul text a esuat: ${e2 && e2.message ? e2.message : e2}`);
     }
   }
+
+  if (result && result.ok) {
+    const msgId = result.data && result.data.result && result.data.result.message_id;
+    logLine(`[BID] ${client} -> telegram ok${msgId ? " msg_id=" + msgId : ""}`);
+  } else if (result) {
+    const errDesc = result.data && (result.data.description || result.data.error);
+    logLine(`[BID] ${client} -> telegram FAIL err=${errDesc || result.status || "?"}`);
+  }
+  logLine(""); // linie goală între blocuri
 
   res.json({ ok: true });
 });
@@ -200,6 +263,15 @@ Cutie: ${data.gearbox || "N/A"}`;
 // ------------------------------------------------------
 app.get("/", (req, res) => {
   res.send("Server ONLINE - Logger + Autologin READY");
+});
+
+// ------------------------------------------------------
+// Health check (Grafana / uptime)
+// ------------------------------------------------------
+app.get("/health", (req, res) => {
+  const h = { ok: true, uptime: Math.round(process.uptime()), ts: new Date().toISOString() };
+  console.log("[HEALTH] ok uptime=" + h.uptime + "s");
+  res.json(h);
 });
 
 // ------------------------------------------------------
