@@ -77,6 +77,32 @@ function logLine(line) {
   writeLogFile(line);
 }
 
+// ------------------------------------------------------
+// NUME FRUMOASE + ULTIMELE 3 CIFRE DIN TELEFON (Telegram)
+// ------------------------------------------------------
+// client_id din logger (ex. "ionescu-vladut") -> nume afișat în mesajul Telegram.
+// Client care nu e în tabelă -> rămâne pe client_id brut (comportament vechi).
+const CLIENT_NAMES = {
+  "braun":          { name: "Braun", last3: "717" },
+  "catalin-pana":   { name: "Catalin Pana", last3: "980" },
+  "david-fleasca":  { name: "David Fleasca", last3: "277" },
+  "edy":            { name: "Edy", last3: "309" },
+  "filip-ionut":    { name: "Filip Ionuț", last3: "905" },
+  "gabone":         { name: "Gabone", last3: "684" },
+  "ionescu-vladut": { name: "Ionescu Vladuț", last3: "927" },
+  "laurentiu":      { name: "Laurentiu", last3: "325" },
+  "mimin-valentin": { name: "Valentin Mimin", last3: "223" },
+  "pavel-ionut":    { name: "Pavel Ionut", last3: "595" },
+  "radu-andrei":    { name: "Radu Andrei", last3: "897" },
+};
+
+// client_id -> text de afișat în Telegram ("Ionescu Vladuț — 927"); fallback = id brut
+function formatClient(clientId) {
+  const info = CLIENT_NAMES[clientId];
+  if (!info) return clientId || "unknown";
+  return info.name + (info.last3 ? " — " + info.last3 : "");
+}
+
 // Ora afișată în mesajul Telegram: Europe/Bucharest (EET iarna / EEST vara).
 // Clienții noi trimit ISO UTC (cu Z) -> formatăm corect. Clienții vechi trimit
 // "YYYY-MM-DD HH:mm:ss" fără marker de fus -> îi păstrăm ca atare.
@@ -220,7 +246,7 @@ app.post("/receive-bid", async (req, res) => {
   const baseMsg =
 `<b>LICITATIE NOUA</b>
 
-Angajat: <b>${client}</b>
+Utilizator: <b>${formatClient(client)}</b>
 Titlu: <b>${data.item_title || ""}</b>
 Suma: <b>${amount} ${data.currency || "EUR"}</b>
 Link: ${data.item_link || ""}
