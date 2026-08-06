@@ -32,6 +32,10 @@ app.use("/public", express.static(publicDir));
 // ------------------------------------------------------
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+// al doilea chat e OPȚIONAL (secret TELEGRAM_CHAT_ID_2 în Fly.io): dacă lipsește,
+// totul funcționează ca înainte, cu un singur chat.
+const TELEGRAM_CHAT_ID_2 = process.env.TELEGRAM_CHAT_ID_2;
+const TELEGRAM_CHAT_IDS = [TELEGRAM_CHAT_ID, TELEGRAM_CHAT_ID_2].filter(Boolean);
 
 const BCA_USERNAME = process.env.BCA_USERNAME;
 const BCA_PASSWORD = process.env.BCA_PASSWORD;
@@ -131,76 +135,98 @@ function formatBucharest(ts) {
 // TRIMITERE MESAJ TEXT PE TELEGRAM
 // ------------------------------------------------------
 async function sendToTelegram(message) {
-  try {
-    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+  // trimitem către FIECARE chat din listă; ok doar dacă TOATE au primit
+  const results = [];
+  let allOk = true;
 
-    if (LOG_DEBUG) {
-      console.log("[SEND] Trimit mesaj text catre Telegram...");
-      console.log("[DEBUG] URL:", url);
-      console.log("[DEBUG] Chat ID:", TELEGRAM_CHAT_ID);
-      console.log("[DEBUG] Mesaj (primii 100 caractere):", message.substring(0, 100));
+  for (const chatId of TELEGRAM_CHAT_IDS) {
+    try {
+      const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+
+      if (LOG_DEBUG) {
+        console.log(`[SEND] Trimit mesaj text catre Telegram (chat ${chatId})...`);
+        console.log("[DEBUG] URL:", url);
+        console.log("[DEBUG] Chat ID:", chatId);
+        console.log("[DEBUG] Mesaj (primii 100 caractere):", message.substring(0, 100));
+      }
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: message,
+          parse_mode: "HTML",
+        }),
+      });
+
+      const responseData = await response.json();
+      if (LOG_DEBUG) console.log(`[RESPONSE] Raspuns Telegram (text, chat ${chatId}):`, responseData);
+
+      if (!response.ok) {
+        console.error(`ERROR Telegram (text, chat ${chatId}):`, responseData);
+        allOk = false;
+      }
+      results.push({ chat_id: chatId, ok: response.ok, status: response.status, data: responseData });
+    } catch (err) {
+      console.error(`ERROR Telegram (sendMessage, chat ${chatId}):`, err && err.message ? err.message : err);
+      allOk = false;
+      results.push({ chat_id: chatId, ok: false, status: 0, data: { error: String(err && err.message ? err.message : err) } });
     }
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: message,
-        parse_mode: "HTML",
-      }),
-    });
-
-    const responseData = await response.json();
-    if (LOG_DEBUG) console.log("[RESPONSE] Raspuns Telegram (text):", responseData);
-
-    if (!response.ok) {
-      console.error("ERROR Telegram (text):", responseData);
-    }
-    return { ok: response.ok, status: response.status, data: responseData };
-  } catch (err) {
-    console.error("ERROR Telegram (sendMessage):", err);
-    throw err;
   }
+
+  const firstBad = results.find((r) => !r.ok);
+  return { ok: allOk && results.length > 0, status: firstBad ? firstBad.status : 200, data: results };
 }
 
 // ------------------------------------------------------
 // TRIMITERE POZA + CAPTION
 // ------------------------------------------------------
 async function sendPhotoToTelegram(photoUrl, caption) {
-  try {
-    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`;
+  // trimitem către FIECARE chat din listă; ok doar dacă TOATE au primit
+  const results = [];
+  let allOk = true;
 
-    if (LOG_DEBUG) {
-      console.log("[SEND] Trimit poza catre Telegram...");
-      console.log("[DEBUG] URL:", url);
-      console.log("[DEBUG] Chat ID:", TELEGRAM_CHAT_ID);
-      console.log("[DEBUG] Photo URL:", photoUrl);
-      console.log("[DEBUG] Caption (primii 100 caractere):", caption.substring(0, 100));
+  for (const chatId of TELEGRAM_CHAT_IDS) {
+    try {
+      const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`;
+
+      if (LOG_DEBUG) {
+        console.log(`[SEND] Trimit poza catre Telegram (chat ${chatId})...`);
+        console.log("[DEBUG] URL:", url);
+        console.log("[DEBUG] Chat ID:", chatId);
+        console.log("[DEBUG] Photo URL:", photoUrl);
+        console.log("[DEBUG] Caption (primii 100 caractere):", caption.substring(0, 100));
+      }
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: photoUrl,
+          caption,
+          parse_mode: "HTML",
+        }),
+      });
+
+      const responseData = await response.json();
+      if (LOG_DEBUG) console.log(`[RESPONSE] Raspuns Telegram (photo, chat ${chatId}):`, responseData);
+
+      if (!response.ok) {
+        console.error(`ERROR Telegram (photo, chat ${chatId}):`, responseData);
+        allOk = false;
+      }
+      results.push({ chat_id: chatId, ok: response.ok, status: response.status, data: responseData });
+    } catch (err) {
+      console.error(`ERROR Telegram (sendPhoto, chat ${chatId}):`, err && err.message ? err.message : err);
+      allOk = false;
+      results.push({ chat_id: chatId, ok: false, status: 0, data: { error: String(err && err.message ? err.message : err) } });
     }
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        photo: photoUrl,
-        caption,
-        parse_mode: "HTML",
-      }),
-    });
-
-    const responseData = await response.json();
-    if (LOG_DEBUG) console.log("[RESPONSE] Raspuns Telegram (photo):", responseData);
-
-    if (!response.ok) {
-      console.error("ERROR Telegram (photo):", responseData);
-    }
-    return { ok: response.ok, status: response.status, data: responseData };
-  } catch (err) {
-    console.error("ERROR Telegram (sendPhoto):", err);
-    throw err;
   }
+
+  const firstBad = results.find((r) => !r.ok);
+  return { ok: allOk && results.length > 0, status: firstBad ? firstBad.status : 200, data: results };
 }
 
 // ------------------------------------------------------
@@ -263,8 +289,11 @@ Cutie: ${data.gearbox || "N/A"}`;
       ? await sendPhotoToTelegram(data.image_url, baseMsg)
       : await sendToTelegram(baseMsg);
   } catch (e) {
-    logLine(`[BID] ${client} -> trimitere foto/text a eșuat: ${e && e.message ? e.message : e}`);
-    // Fallback: incearca text daca poza a esuat
+    logLine(`[BID] ${client} -> trimitere a eșuat: ${e && e.message ? e.message : e}`);
+  }
+
+  // Fallback: dacă poza a eșuat, încearcă text (către aceleași chat-uri)
+  if ((!result || !result.ok) && data.image_url) {
     try {
       result = await sendToTelegram(baseMsg);
     } catch (e2) {
@@ -273,10 +302,16 @@ Cutie: ${data.gearbox || "N/A"}`;
   }
 
   if (result && result.ok) {
-    const msgId = result.data && result.data.result && result.data.result.message_id;
-    logLine(`[BID] ${client} -> telegram ok${msgId ? " msg_id=" + msgId : ""}`);
+    // msg_id-urile din TOATE chat-urile, separate cu virgulă (ex. "545,546")
+    const msgIds = (result.data || [])
+      .filter((r) => r && r.ok && r.data && r.data.result && r.data.result.message_id)
+      .map((r) => r.data.result.message_id);
+    logLine(`[BID] ${client} -> telegram ok${msgIds.length ? " msg_id=" + msgIds.join(",") : ""}`);
   } else if (result) {
-    const errDesc = result.data && (result.data.description || result.data.error);
+    const errDesc = (result.data || [])
+      .filter((r) => r && !r.ok)
+      .map((r) => (r.data && (r.data.description || r.data.error)) || r.status || "?")
+      .join("; ");
     logLine(`[BID] ${client} -> telegram FAIL err=${errDesc || result.status || "?"}`);
   }
   logLine(""); // linie goală între blocuri
