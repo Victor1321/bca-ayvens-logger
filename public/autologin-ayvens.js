@@ -147,19 +147,29 @@
         return new Promise((resolve) => {
             dlog("📨 [DEBUG] Trimitem AYVENS_GET_CREDS...");
 
+            let done = false;
+            let timer = null;
+
+            function finish(val) {
+                if (done) return;
+                done = true;
+                if (timer) clearTimeout(timer);
+                window.removeEventListener("message", handler);
+                resolve(val);
+            }
+
             function handler(event) {
                 if (event.source !== window) return;
                 const data = event.data || {};
                 dlog("📥 [DEBUG] Mesaj primit:", data.type);
                 if (data.type === "AYVENS_CREDS") {
-                    window.removeEventListener("message", handler);
                     dlog("✅ [DEBUG] Credențiale primite:", data.creds);
                     if (data.creds && data.creds.ok) {
                         dlog("🟢 [DEBUG] Credențiale valide.");
-                        resolve(data.creds);
+                        finish(data.creds);
                     } else {
                         console.error("🔴 [DEBUG] Credențiale invalide:", data.creds);
-                        resolve(null);
+                        finish(null);
                     }
                 }
             }
@@ -167,6 +177,12 @@
             window.addEventListener("message", handler);
             window.postMessage({ type: "AYVENS_GET_CREDS" }, "*");
             dlog("📤 [DEBUG] AYVENS_GET_CREDS trimis.");
+
+            // dacă extensia nu răspunde, nu blocăm pagina la nesfârșit
+            timer = setTimeout(() => {
+                console.error("🔴 [DEBUG] Nu am primit răspuns de la extensie (timeout 8s). Verifică extensia.");
+                finish(null);
+            }, 8000);
         });
     }
 
@@ -193,9 +209,16 @@
         dlog("🚀 [DEBUG] ===== handleAyvensLogin() A ÎNCEPUT =====");
 
         try {
-            // 1) Buton "Conectare" din header
+            // 1) Buton "Conectare" din header — dacă nu apare în 10s, ești deja
+            //    logat (header fără buton de login) → ieși fără zgomot.
             dlog("⏳ [DEBUG] Caut butonul #btn_signIn...");
-            const openLoginBtn = await waitFor("#btn_signIn", 15000);
+            let openLoginBtn = null;
+            try {
+                openLoginBtn = await waitFor("#btn_signIn", 10000);
+            } catch (e) {
+                dlog("Nu am găsit #btn_signIn — probabil deja logat. Ies fără zgomot.");
+                return;
+            }
             dlog("Buton #btn_signIn găsit. Dau click.");
             openLoginBtn.click();
             console.log("[AUTOLOGIN] ayvens: click Conectare");
@@ -289,32 +312,16 @@
     // ---------------------------------------------------------
     // PORNIRE SCRIPT
     // ---------------------------------------------------------
-    function isLoggedIn() {
-        // markere de utilizator autentificat în header
-        try {
-            const markers = [
-                '#userMenu', '[class*="user-menu"]', '[class*="userMenu"]',
-                '[class*="logout"]', '[href*="logout"]', '[class*="Logout"]',
-                '[class*="avatar"]', '[class*="account"]', '[class*="profile"]',
-            ];
-            if (document.querySelector(markers.join(","))) return true;
-        } catch (e) {}
-        return false;
-    }
 
     function init() {
         // pornește o singură dată per pagină
         if (window.__ayvensAutologinStarted) return;
         window.__ayvensAutologinStarted = true;
 
-        // dacă ești deja logat sau nu există buton de login, ieși fără zgomot
-        try {
-            const hasLoginBtn = document.getElementById("btn_signIn");
-            if (isLoggedIn() || !hasLoginBtn) {
-                dlog("Deja logat sau fără buton de login — ies fără zgomot.");
-                return;
-            }
-        } catch (e) {}
+        // NU mai ieșim aici pe verificări „o singură dată” (pagina e SPA Angular:
+        // header-ul/butonul se randează după DOMContentLoaded, iar markerii largi
+        // de „deja logat” dau false-positive). Starea reală o decide flow-ul:
+        // dacă #btn_signIn nu apare în timp util → deja logat → ieșire silențioasă.
 
         dlog("init() apelat. Host:", HOST);
 
