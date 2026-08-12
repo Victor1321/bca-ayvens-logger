@@ -6,7 +6,7 @@
 
   const SERVER_URL = "https://bca-ayvens-logger.fly.dev/receive-bid";
   const CLIENT_ID = "test"; // Schimbă după nevoie
-  const VERSION = "3.2.1";
+  const VERSION = "3.2.2";
 
   // ----- DEBUG: activ cu ?debug=1 în URL sau localStorage['logger-debug']='1' -----
   const DEBUG = (function () {
@@ -1245,6 +1245,32 @@
       obs.observe(target, { childList: true, subtree: true, characterData: true });
     })();
 
+    // ----- HELPERS partajate XHR/FETCH (nivel de bloc IDP) -----
+    // URL-uri de bid „hard” — prinse indiferent de pagină/limbă/click; și relative ("proxyBid.json")
+    function isHardBidUrl(u) {
+      const s = String(u || "").toLowerCase();
+      return s.includes("proxybid") || s.includes("/rt/api/bid") || s.includes("/api/bid")
+        || /(^|[\/?])bid([\/?]|$)/.test(s) || /(^|[\/?])proxy([\/?]|$)/.test(s);
+    }
+
+    // body-ul conține semnal de bid (form-encoded: proxyBid=200&lotid=... sau JSON)
+    function isBodyBid(text) {
+      return /proxybid|maxbid|bidamount/i.test(text || "");
+    }
+
+    function bodyTextOf(b) {
+      if (typeof b === "string") return b;
+      if (b instanceof FormData) {
+        const arr = [];
+        b.forEach((v, k) => arr.push(k + "=" + v));
+        return arr.join("&");
+      }
+      if (b && typeof b === "object") {
+        try { return JSON.stringify(b); } catch (e) {}
+      }
+      return "";
+    }
+
     (function () {
       const origSend = XMLHttpRequest.prototype.send;
       const origOpen = XMLHttpRequest.prototype.open;
@@ -1255,39 +1281,34 @@
         return origOpen.apply(this, arguments);
       };
 
-      // URL-uri de bid „hard” — prinse indiferent de pagină/limbă/click
-      function isHardBidUrl(u) {
-        return /\/proxybid\.json|\/rt\/api\/bid|\/api\/bid|\/bid\b|\/proxy/i.test(u || "");
-      }
-
       XMLHttpRequest.prototype.send = function (body) {
         try {
           if (!location.hostname.includes("idp.bca-online-auctions.eu")) return origSend.apply(this, arguments);
           if (!this._method || this._method.toUpperCase() !== "POST" || !this._url) return origSend.apply(this, arguments);
-          if (!isHardBidUrl(this._url)) return origSend.apply(this, arguments);
+
+          const bodyText = bodyTextOf(body);
+          const urlMatch = isHardBidUrl(this._url);
+          const bodyMatch = isBodyBid(bodyText);
+          if (!urlMatch && !bodyMatch) return origSend.apply(this, arguments);
 
           // linie PERMANENTĂ — vezi mereu în consolă că request-ul a fost prins
-          console.log("[BID-LOGGER] match XHR:", this._url);
+          console.log("[BID-LOGGER] match XHR:", this._url + (bodyMatch ? " (semnal în body)" : ""));
 
-          let bodyText = "";
-          if (typeof body === "string") bodyText = body;
-          else if (body instanceof FormData) {
-            const arr = [];
-            body.forEach((v, k) => arr.push(k + "=" + v));
-            bodyText = arr.join("&");
-          } else if (body && typeof body === "object") {
-            try { bodyText = JSON.stringify(body); } catch (e) {}
-          }
-
-          const lotidMatch = String(this._url).match(/lotid=(\d+)/i) || bodyText.match(/["']?lotid["']?\s*[:=]\s*"?(\d+)/i);
-          const lotid = lotidMatch ? lotidMatch[1] : null;
-
+          // sumă: proxyBid=200 → câmpuri JSON → scan plauzibil → input
           let amount = null;
-          if (bodyText) amount = parseAmountFromJson(bodyText) || scanAmount(bodyText);
+          const pm = bodyText.match(/proxybid\s*[:=]\s*"?([\d.,]+)/i);
+          if (pm) {
+            const n = parseFloat(String(pm[1]).replace(/\./g, "").replace(",", "."));
+            if (!isNaN(n) && n > 0) amount = n;
+          }
+          if (!amount && bodyText) amount = parseAmountFromJson(bodyText) || scanAmount(bodyText);
           if (!amount) {
             const input = document.getElementById("proxyBidValue");
             if (input && input.value) amount = extractNumber(input.value);
           }
+
+          const lotidMatch = String(this._url).match(/lotid=(\d+)/i) || bodyText.match(/["']?lotid["']?\s*[:=]\s*"?(\d+)/i);
+          const lotid = lotidMatch ? lotidMatch[1] : null;
 
           if (amount) {
             const payload = buildIdpPayload(amount, "idp-xhr-bid");
@@ -1295,7 +1316,7 @@
             payload._dedup_key = (lotid || "idp") + "|" + amount;
             sendToServer(payload, payload._dedup_key);
           } else {
-            console.log("[BID-LOGGER] bid URL fără sumă în body — aștept răspunsul:", this._url);
+            console.log("[BID-LOGGER] bid fără sumă — aștept răspunsul:", this._url);
           }
 
           // hook pe răspuns: suma CONFIRMATĂ de server (cade și când body-ul n-avea sumă)
@@ -1320,7 +1341,7 @@
       };
     })();
 
-    // ----- INTERCEPTOR FETCH (IDP) — v3.2.1: v3.2.0 îl sărea complet -----
+    // ----- INTERCEPTOR FETCH (IDP) — v3.2.2: URL relativ + catch pe body -----
     (function () {
       const origFetch = window.fetch;
       if (!origFetch) return;
@@ -1330,26 +1351,30 @@
           const url = typeof input === "string" ? input : (input && input.url) || "";
           const method = (init && init.method) || (input && input.method) || "GET";
           if (method.toUpperCase() !== "POST") return origFetch.apply(this, arguments);
-          if (!/\/proxybid\.json|\/rt\/api\/bid|\/api\/bid|\/bid\b|\/proxy/i.test(url)) return origFetch.apply(this, arguments);
-
-          console.log("[BID-LOGGER] match FETCH:", url);
 
           const body = (init && init.body) || (input && input.body) || null;
-          let bodyText = "";
-          if (typeof body === "string") bodyText = body;
-          else if (body && typeof body === "object") {
-            try { bodyText = JSON.stringify(body); } catch (e) {}
+          const bodyText = bodyTextOf(body);
+          const urlMatch = isHardBidUrl(url);
+          const bodyMatch = isBodyBid(bodyText);
+          if (!urlMatch && !bodyMatch) return origFetch.apply(this, arguments);
+
+          console.log("[BID-LOGGER] match FETCH:", url + (bodyMatch ? " (semnal în body)" : ""));
+
+          let amount = null;
+          const pm = bodyText.match(/proxybid\s*[:=]\s*"?([\d.,]+)/i);
+          if (pm) {
+            const n = parseFloat(String(pm[1]).replace(/\./g, "").replace(",", "."));
+            if (!isNaN(n) && n > 0) amount = n;
+          }
+          if (!amount && bodyText) amount = parseAmountFromJson(bodyText) || scanAmount(bodyText);
+          if (!amount) {
+            const input = document.getElementById("proxyBidValue");
+            if (input && input.value) amount = extractNumber(input.value);
           }
 
           const lotidMatch = String(url).match(/lotid=(\d+)/i) || bodyText.match(/["']?lotid["']?\s*[:=]\s*"?(\d+)/i);
           const lotid = lotidMatch ? lotidMatch[1] : null;
 
-          let amount = null;
-          if (bodyText) amount = parseAmountFromJson(bodyText) || scanAmount(bodyText);
-          if (!amount) {
-            const input = document.getElementById("proxyBidValue");
-            if (input && input.value) amount = extractNumber(input.value);
-          }
           if (amount) {
             const payload = buildIdpPayload(amount, "idp-fetch-bid");
             if (lotid) payload.lot_number = lotid;
