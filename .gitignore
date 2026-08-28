@@ -1,0 +1,20 @@
+# Node / dependențe
+node_modules/
+
+# Mediu / secrete
+.env
+.env.*
+!.env.example
+
+# Loguri și fișiere temporare de debug
+debug.log
+.tmp_*
+*.tmp
+
+# Fișiere interne .reasonix (sesiuni/task-uri) + template nelegat
+.reasonix/
+youtube-music-glass/
+
+# OS
+Thumbs.db
+.DS_Store
