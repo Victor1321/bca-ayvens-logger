@@ -25,6 +25,7 @@
     // unde completăm user+parolă
     const LOGIN_HOSTS = [
         "login.bca.com"
+        "auth.bca.com"
     ];
 
     const HOST = location.hostname;
