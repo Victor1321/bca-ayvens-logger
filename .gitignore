@@ -15,6 +15,10 @@ debug.log
 .reasonix/
 youtube-music-glass/
 
+# Pachete de distribuit (extensii per utilizator) + folderul local de lucru
+Extensii-BCA/
+extensie loader/
+
 # OS
 Thumbs.db
 .DS_Store

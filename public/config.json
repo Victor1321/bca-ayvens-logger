@@ -1,0 +1,12 @@
+{
+  "hosts": [
+    "www.bca.com",
+    "bca.com",
+    "login.bca.com",
+    "auth.bca.com",
+    "ee.bca-europe.com",
+    "idp.bca-online-auctions.eu",
+    "carmarket.ayvens.com"
+  ],
+  "bcaSubdomains": true
+}

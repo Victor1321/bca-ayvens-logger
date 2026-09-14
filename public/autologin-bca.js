@@ -1,5 +1,5 @@
 // ============================================================
-// AUTOLOGIN BCA (homepage + login.bca.com) — BRIDGE + OVERLAY
+// AUTOLOGIN BCA (homepage + login.bca.com / auth.bca.com) — BRIDGE + OVERLAY
 // ============================================================
 
 (function () {
@@ -22,9 +22,9 @@
         "bca.com"
     ];
 
-    // unde completăm user+parolă
+    // unde completăm user+parolă (login.bca.com = vechi, auth.bca.com = Auth0 Universal Login nou)
     const LOGIN_HOSTS = [
-        "login.bca.com"
+        "login.bca.com",
         "auth.bca.com"
     ];
 
@@ -180,10 +180,20 @@
     // ---------------------------------------------------------
     function fillInput(input, value) {
         if (!input) return;
-        input.focus();
-        input.value = value;
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
+        try { input.focus(); } catch (e) {}
+        // setter nativ: formularele moderne (Auth0 Universal Login) își urmăresc intern
+        // valoarea, iar `input.value = x` simplu nu le declanșează starea internă
+        try {
+            const proto = Object.getPrototypeOf(input);
+            const desc = proto && Object.getOwnPropertyDescriptor(proto, "value");
+            if (desc && desc.set) desc.set.call(input, value);
+            else input.value = value;
+        } catch (e) { input.value = value; }
+        ["input", "change"].forEach(function (t) {
+            try { input.dispatchEvent(new Event(t, { bubbles: true })); } catch (e) {}
+        });
+        // Auth0 ULP validează pe blur,change,input,focus
+        try { input.dispatchEvent(new Event("blur", { bubbles: false })); } catch (e) {}
     }
 
     // ---------------------------------------------------------
@@ -247,10 +257,10 @@
     // ---------------------------------------------------------
     async function handleLogin() {
         try {
-            dlog("Sunt pe login.bca.com, aștept formularul...");
+            dlog("Sunt pe pagina de login BCA (" + HOST + "), aștept formularul...");
 
-            // pagina e AngularJS: formularul se randează după încărcare → îl AȘTEPTĂM,
-            // nu verificăm o singură dată. Dacă nu apare în 15s → ești deja logat/redirectat → ieși fără zgomot.
+            // pagina de login (Auth0 Universal Login / AngularJS) randează formularul după
+            // încărcare → îl AȘTEPTĂM. Dacă nu apare în 15s → ești deja logat → ieși silențios.
             const FORM_SELECTOR = "#username, input[name='username'], input[type='email'], #password, input[name='password'], input[type='password']";
             try {
                 await waitFor(FORM_SELECTOR, 15000);
@@ -287,7 +297,7 @@
             dlog("[AUTOLOGIN-BCA] Date completate, caut buton submit...");
 
             let submitBtn = await waitFor(
-                "#loginButton, button#loginButton, button[id='loginButton'], button[type='submit'], input[type='submit'], button.login, button[type='button'][name='login'], [ng-click*='login'], [ng-click*='signin'], [ng-click*='submit']",
+                "button[type='submit'][name='action'], button[data-action-button-primary='true'], form[data-form-primary='true'] button[type='submit'], #loginButton, button#loginButton, button[id='loginButton'], button[type='submit'], input[type='submit'], button.login, button[type='button'][name='login'], [ng-click*='login'], [ng-click*='signin'], [ng-click*='submit']",
                 15000
             ).catch(() => null);
 
@@ -348,21 +358,26 @@
         window.__bcaAutologinStarted = true;
 
         // pe homepage verificăm dacă ești deja logat (markeri tari);
-        // pe login.bca.com NU ne bazăm pe markeri — formularul decide (așteptat cu waitFor)
+        // pe paginile de login NU ne bazăm pe markeri — formularul decide (așteptat cu waitFor)
         if (HOME_HOSTS.includes(HOST) && isLoggedIn()) {
             dlog("Deja logat, ies fără zgomot.");
             return;
         }
 
-        // încerci să accepți cookies pe ambele host-uri (homepage + login)
-        if (HOME_HOSTS.includes(HOST) || LOGIN_HOSTS.includes(HOST)) {
+        // orice subdomeniu bca.com care NU e homepage = pagină de login.
+        // Acoperă și viitoare mutări ale login-ului pe alt subdomeniu (ex. auth.bca.com).
+        const isBcaLoginHost = LOGIN_HOSTS.includes(HOST) ||
+            (HOST.endsWith(".bca.com") && !HOME_HOSTS.includes(HOST));
+
+        // încearcă să accepte cookies pe homepage + login
+        if (HOME_HOSTS.includes(HOST) || isBcaLoginHost) {
             acceptBcaCookies();
         }
 
         if (HOME_HOSTS.includes(HOST)) {
             dlog("Host homepage detectat:", HOST);
             setTimeout(handleHome, 3000);
-        } else if (LOGIN_HOSTS.includes(HOST)) {
+        } else if (isBcaLoginHost) {
             dlog("Host login detectat:", HOST);
             setTimeout(handleLogin, 1000);
         }

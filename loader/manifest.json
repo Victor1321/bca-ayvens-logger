@@ -1,0 +1,32 @@
+{
+  "manifest_version": 2,
+  "name": "Auction Logger System Addon",
+  "version": "1.1",
+  "description": "Injectează scripturile logger şi autologin pe BCA & Ayvens.",
+  
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "auctionlogger@system",
+      "strict_min_version": "60.0"
+    }
+  },
+
+  "background": {
+    "scripts": ["background.js"]
+  },
+
+ "content_scripts": [
+  {
+    "matches": ["<all_urls>"],
+    "js": ["content-script-loader.js"],
+    "run_at": "document_start"
+  }
+],
+
+  "permissions": [
+    "tabs",
+    "webRequest",
+    "webRequestBlocking",
+    "*://bca-ayvens-logger.fly.dev/*"
+  ]
+}
